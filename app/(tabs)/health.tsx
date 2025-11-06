@@ -1,19 +1,73 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import React, { useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { mockHealthMetrics, mockSleepData, mockHeartRateData, mockSpO2Data, mockWeightData } from '../../data/mockData';
 import { BarChart, LineChart } from 'react-native-gifted-charts';
+import { useTheme, useThemeColors } from '../../contexts/ThemeContext';
 
 const { width } = Dimensions.get('window');
 
 export default function HealthScreen() {
     const { calories, steps, standing, moving } = mockHealthMetrics;
+    const colors = useThemeColors();
+    const { themeTransition } = useTheme();
+    const fadeAnim = useRef(new Animated.Value(1)).current;
+
+    // Fade animation on theme change
+    useEffect(() => {
+        const listener = themeTransition.addListener(({ value }) => {
+            if (value === 0) {
+                // Start fade out
+                Animated.timing(fadeAnim, {
+                    toValue: 0.7,
+                    duration: 150,
+                    useNativeDriver: true,
+                }).start(() => {
+                    // Fade back in
+                    Animated.timing(fadeAnim, {
+                        toValue: 1,
+                        duration: 150,
+                        useNativeDriver: true,
+                    }).start();
+                });
+            }
+        });
+
+        return () => {
+            themeTransition.removeListener(listener);
+        };
+    }, [themeTransition, fadeAnim]);
 
     // Calculate overall completion percentage
     const caloriesPercent = (calories.current / calories.goal) * 100;
     const stepsPercent = (steps.current / steps.goal) * 100;
     const standingPercent = (standing.current / standing.goal) * 100;
     const overallPercent = (caloriesPercent + stepsPercent + standingPercent) / 3;
+
+    // Calculate cookies earned (1 cookie per 50 calories)
+    const cookiesEarned = Math.floor(calories.current / 50);
+
+    // Prepare gauge data (sorted from outer to inner: Steps, Standing, Calories)
+    const gaugeData = [
+        {
+            value: steps.current,
+            maxValue: steps.goal,
+            color: '#34C759',
+            label: 'Steps',
+        },
+        {
+            value: standing.current,
+            maxValue: standing.goal,
+            color: '#FFD60A',
+            label: 'Standing',
+        },
+        {
+            value: calories.current,
+            maxValue: calories.goal,
+            color: '#FF453A',
+            label: 'Calories',
+        },
+    ];
 
     // Prepare heart rate chart data
     const heartRateChartData = mockHeartRateData.history.slice(-12).map((bpm, index) => ({
@@ -38,22 +92,25 @@ export default function HealthScreen() {
         : [];
 
     return (
-        <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        <Animated.ScrollView
+            style={[styles.container, { backgroundColor: colors.background, opacity: fadeAnim }]}
+            showsVerticalScrollIndicator={false}
+        >
             {/* Header */}
-            <View style={styles.header}>
-                <Text style={styles.headerTitle}>Health</Text>
+            <View style={[styles.header, { backgroundColor: colors.cardBackground }]}>
+                <Text style={[styles.headerTitle, { color: colors.text }]}>Health</Text>
                 <TouchableOpacity style={styles.addButton}>
-                    <Ionicons name="add-circle-outline" size={28} color="#007AFF" />
+                    <Ionicons name="add-circle-outline" size={28} color={colors.info} />
                 </TouchableOpacity>
             </View>
 
             {/* Summary Circle */}
-            <View style={styles.summaryContainer}>
+            <View style={[styles.summaryContainer, { backgroundColor: colors.cardBackground }]}>
                 <View style={styles.circleContainer}>
                     {/* Outer Ring - Steps */}
-                    <View style={[styles.ring, styles.ringOuter]}>
+                    <View style={[styles.ring, styles.ringOuter, { borderColor: colors.border }]}>
                         <View style={[styles.ringProgress, {
-                            borderColor: '#34C759',
+                            borderColor: colors.stepsColor,
                             borderTopWidth: 8,
                             borderRightWidth: stepsPercent > 25 ? 8 : 0,
                             borderBottomWidth: stepsPercent > 50 ? 8 : 0,
@@ -62,9 +119,9 @@ export default function HealthScreen() {
                     </View>
 
                     {/* Middle Ring - Standing */}
-                    <View style={[styles.ring, styles.ringMiddle]}>
+                    <View style={[styles.ring, styles.ringMiddle, { borderColor: colors.border }]}>
                         <View style={[styles.ringProgress, {
-                            borderColor: '#FFD60A',
+                            borderColor: colors.standingColor,
                             borderTopWidth: 6,
                             borderRightWidth: standingPercent > 25 ? 6 : 0,
                             borderBottomWidth: standingPercent > 50 ? 6 : 0,
@@ -73,9 +130,9 @@ export default function HealthScreen() {
                     </View>
 
                     {/* Inner Ring - Calories */}
-                    <View style={[styles.ring, styles.ringInner]}>
+                    <View style={[styles.ring, styles.ringInner, { borderColor: colors.border }]}>
                         <View style={[styles.ringProgress, {
-                            borderColor: '#FF453A',
+                            borderColor: colors.caloriesColor,
                             borderTopWidth: 5,
                             borderRightWidth: caloriesPercent > 25 ? 5 : 0,
                             borderBottomWidth: caloriesPercent > 50 ? 5 : 0,
@@ -85,14 +142,14 @@ export default function HealthScreen() {
 
                     {/* Center Content */}
                     <View style={styles.circleCenter}>
-                        <Text style={styles.percentText}>{Math.round(overallPercent)}%</Text>
+                        <Text style={[styles.percentText, { color: colors.text }]}>{Math.round(overallPercent)}%</Text>
                     </View>
                 </View>
 
-                {/* Achievement Icon */}
-                <View style={styles.achievementIcon}>
+                {/* Achievement Card */}
+                <View style={[styles.achievementCard, { backgroundColor: colors.background }]}>
                     <Text style={styles.cookieEmoji}>🍪</Text>
-                    <Text style={{ fontSize: 16, paddingLeft: 12 }}>x2</Text>
+                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.warning }}>x {cookiesEarned}</Text>
                 </View>
             </View>
 
@@ -100,15 +157,16 @@ export default function HealthScreen() {
             <View style={styles.metricsGrid}>
                 <MetricCard
                     icon="flame"
-                    iconColor="#FF453A"
+                    iconColor={colors.caloriesColor}
                     label="Calories"
                     value={calories.current}
                     unit="kcal"
                     goal={calories.goal}
+                    colors={colors}
                 />
                 <MetricCard
                     icon="footsteps"
-                    iconColor="#34C759"
+                    iconColor={colors.stepsColor}
                     label="Steps"
                     value={steps.current}
                     unit="steps"
@@ -116,32 +174,33 @@ export default function HealthScreen() {
                 />
                 <MetricCard
                     icon="time"
-                    iconColor="#FFD60A"
+                    iconColor={colors.standingColor}
                     label="Standing"
                     value={standing.current}
                     unit="hrs"
                     goal={standing.goal}
+                    colors={colors}
                 />
             </View>
 
             {/* Moving Time */}
-            <TouchableOpacity style={styles.movingCard}>
+            <TouchableOpacity style={[styles.movingCard, { backgroundColor: colors.cardBackground }]}>
                 <View style={styles.movingContent}>
-                    <Ionicons name="walk" size={24} color="#007AFF" />
-                    <Text style={styles.movingText}>Moving {moving.minutes}mins</Text>
+                    <Ionicons name="walk" size={24} color={colors.info} />
+                    <Text style={[styles.movingText, { color: colors.text }]}>Moving {moving.minutes}mins</Text>
                 </View>
             </TouchableOpacity>
 
             {/* Detail Cards */}
             <View style={styles.detailCards}>
                 {/* Heart Rate Card */}
-                <TouchableOpacity style={styles.detailCard}>
+                <TouchableOpacity style={[styles.detailCard, { backgroundColor: colors.cardBackground }]}>
                     <View style={styles.cardHeader}>
-                        <Ionicons name="heart" size={24} color="#FF453A" />
-                        <Text style={styles.cardTitle}>Heart rate</Text>
+                        <Ionicons name="heart" size={24} color={colors.heartRateColor} />
+                        <Text style={[styles.cardTitle, { color: colors.text }]}>Heart rate</Text>
                     </View>
-                    <Text style={styles.cardValue}>{mockHeartRateData.bpm} BPM</Text>
-                    <Text style={styles.cardSubtext}>{mockHeartRateData.timestamp}</Text>
+                    <Text style={[styles.cardValue, { color: colors.text }]}>{mockHeartRateData.bpm} BPM</Text>
+                    <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>{mockHeartRateData.timestamp}</Text>
 
                     {/* Heart Rate Chart */}
                     <View style={styles.chartContainer}>
@@ -150,7 +209,7 @@ export default function HealthScreen() {
                             barWidth={10}
                             spacing={6}
                             barBorderRadius={4}
-                            frontColor="#FF453A"
+                            frontColor={colors.heartRateColor}
                             yAxisThickness={0}
                             xAxisThickness={0}
                             hideRules
@@ -163,13 +222,13 @@ export default function HealthScreen() {
                 </TouchableOpacity>
 
                 {/* SpO2 Card */}
-                <TouchableOpacity style={styles.detailCard}>
+                <TouchableOpacity style={[styles.detailCard, { backgroundColor: colors.cardBackground }]}>
                     <View style={styles.cardHeader}>
-                        <Ionicons name="water" size={24} color="#FF453A" />
-                        <Text style={styles.cardTitle}>SpO2</Text>
+                        <Ionicons name="water" size={24} color={colors.spO2Color} />
+                        <Text style={[styles.cardTitle, { color: colors.text }]}>SpO2</Text>
                     </View>
-                    <Text style={styles.cardValue}>{mockSpO2Data.percentage} %</Text>
-                    <Text style={styles.cardSubtext}>{mockSpO2Data.timestamp}</Text>
+                    <Text style={[styles.cardValue, { color: colors.text }]}>{mockSpO2Data.percentage} %</Text>
+                    <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>{mockSpO2Data.timestamp}</Text>
 
                     {/* SpO2 Chart */}
                     <View style={styles.chartContainer}>
@@ -178,7 +237,7 @@ export default function HealthScreen() {
                             barWidth={10}
                             spacing={6}
                             barBorderRadius={4}
-                            frontColor="#FF453A"
+                            frontColor={colors.spO2Color}
                             yAxisThickness={0}
                             xAxisThickness={0}
                             hideRules
@@ -191,13 +250,13 @@ export default function HealthScreen() {
                 </TouchableOpacity>
 
                 {/* Weight Card */}
-                <TouchableOpacity style={styles.detailCard}>
+                <TouchableOpacity style={[styles.detailCard, { backgroundColor: colors.cardBackground }]}>
                     <View style={styles.cardHeader}>
-                        <Ionicons name="scale" size={24} color="#26c949ff" />
-                        <Text style={styles.cardTitle}>Weight</Text>
+                        <Ionicons name="scale" size={24} color={colors.weightColor} />
+                        <Text style={[styles.cardTitle, { color: colors.text }]}>Weight</Text>
                     </View>
-                    <Text style={styles.cardValue}>{mockWeightData.weight} kg</Text>
-                    <Text style={styles.cardSubtext}>{mockWeightData.date}</Text>
+                    <Text style={[styles.cardValue, { color: colors.text }]}>{mockWeightData.weight} kg</Text>
+                    <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>{mockWeightData.date}</Text>
 
                     {/* Weight Chart */}
                     <View style={styles.chartContainer}>
@@ -211,40 +270,46 @@ export default function HealthScreen() {
                             height={60}
                             width={(width - 44) / 2 - 32}
                             noOfSections={3}
+                            color={colors.weightColor}
+                            dataPointsColor={colors.weightColor}
+                            startFillColor={colors.weightColor}
+                            endFillColor={colors.weightColor}
+                            startOpacity={0.4}
+                            endOpacity={0.1}
                         />
                     </View>
                 </TouchableOpacity>
 
                 {/* Sleep Card */}
-                <TouchableOpacity style={styles.detailCard}>
+                <TouchableOpacity style={[styles.detailCard, { backgroundColor: colors.cardBackground }]}>
                     <View style={styles.cardHeader}>
-                        <Ionicons name="moon" size={24} color="#5E5CE6" />
-                        <Text style={styles.cardTitle}>Sleep</Text>
+                        <Ionicons name="moon" size={24} color={colors.sleepColor} />
+                        <Text style={[styles.cardTitle, { color: colors.text }]}>Sleep</Text>
                     </View>
-                    <Text style={styles.cardValue}>{mockSleepData.duration}</Text>
-                    <Text style={styles.cardSubtext}>
+                    <Text style={[styles.cardValue, { color: colors.text }]}>{mockSleepData.duration}</Text>
+                    <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>
                         {mockSleepData.date} {mockSleepData.quality}
                     </Text>
 
                     {/* Quality Bar */}
                     <View style={styles.qualityBarContainer}>
-                        <View style={styles.qualityBar}>
+                        <View style={[styles.qualityBar, { backgroundColor: colors.border }]}>
                             <View
                                 style={[
                                     styles.qualityBarFill,
-                                    { width: `${mockSleepData.qualityScore}%` }
+                                    { width: `${mockSleepData.qualityScore}%`, backgroundColor: colors.sleepColor }
                                 ]}
                             />
                             <View
                                 style={[
                                     styles.qualityIndicator,
-                                    { left: `${mockSleepData.qualityScore}%` }
+                                    { left: `${mockSleepData.qualityScore}%`, backgroundColor: colors.sleepColor }
                                 ]}
                             />
                         </View>
                         <View style={styles.qualityLabels}>
-                            <Text style={styles.qualityLabel}>Poor</Text>
-                            <Text style={styles.qualityLabel}>Excellent</Text>
+                            <Text style={[styles.qualityLabel, { color: colors.textSecondary }]}>Poor</Text>
+                            <Text style={[styles.qualityLabel, { color: colors.textSecondary }]}>Excellent</Text>
                         </View>
                     </View>
                 </TouchableOpacity>
@@ -253,7 +318,7 @@ export default function HealthScreen() {
 
             {/* Bottom Spacing */}
             <View style={styles.bottomSpacing} />
-        </ScrollView>
+        </Animated.ScrollView>
     );
 }
 
@@ -265,21 +330,24 @@ interface MetricCardProps {
     value: number;
     unit: string;
     goal: number;
+    colors?: any;
 }
 
-const MetricCard: React.FC<MetricCardProps> = ({ icon, iconColor, label, value, unit, goal }) => (
-    <TouchableOpacity style={styles.metricCard}>
-        <Ionicons name={icon} size={20} color={iconColor} />
-        <Text style={styles.metricLabel}>{label}</Text>
-        <Text style={styles.metricValue}>{value}</Text>
-        <Text style={styles.metricGoal}>/{goal}{unit}</Text>
-    </TouchableOpacity>
-);
+const MetricCard: React.FC<MetricCardProps> = ({ icon, iconColor, label, value, unit, goal, colors }) => {
+    const themeColors = colors || useThemeColors();
+    return (
+        <TouchableOpacity style={[styles.metricCard, { backgroundColor: themeColors.cardBackground }]}>
+            <Ionicons name={icon} size={20} color={iconColor} />
+            <Text style={[styles.metricLabel, { color: themeColors.textSecondary }]}>{label}</Text>
+            <Text style={[styles.metricValue, { color: themeColors.text }]}>{value}</Text>
+            <Text style={[styles.metricGoal, { color: themeColors.textSecondary }]}>/{goal}{unit}</Text>
+        </TouchableOpacity>
+    );
+};
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F2F2F7',
     },
     header: {
         flexDirection: 'row',
@@ -288,18 +356,15 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         paddingTop: 60,
         paddingBottom: 20,
-        backgroundColor: '#FFFFFF',
     },
     headerTitle: {
         fontSize: 34,
         fontWeight: 'bold',
-        color: '#000',
     },
     addButton: {
         padding: 4,
     },
     summaryContainer: {
-        backgroundColor: '#FFFFFF',
         paddingVertical: 30,
         alignItems: 'center',
         position: 'relative',
@@ -319,19 +384,16 @@ const styles = StyleSheet.create({
         width: 180,
         height: 180,
         borderWidth: 8,
-        borderColor: '#E5E5EA',
     },
     ringMiddle: {
         width: 150,
         height: 150,
         borderWidth: 6,
-        borderColor: '#E5E5EA',
     },
     ringInner: {
         width: 120,
         height: 120,
         borderWidth: 5,
-        borderColor: '#E5E5EA',
     },
     ringProgress: {
         width: '100%',
@@ -347,12 +409,16 @@ const styles = StyleSheet.create({
     percentText: {
         fontSize: 28,
         fontWeight: '600',
-        color: '#000',
     },
-    achievementIcon: {
+    // i want achievement card in bottom right corner of summary container
+    achievementCard: {
         position: 'absolute',
-        right: 30,
-        top: 40,
+        right: 20,
+        bottom: 16,
+        borderRadius: 12,
+        padding: 12,
+        flexDirection: 'column',
+        alignItems: 'center',
     },
     cookieEmoji: {
         fontSize: 40,
@@ -365,28 +431,23 @@ const styles = StyleSheet.create({
     },
     metricCard: {
         flex: 1,
-        backgroundColor: '#FFFFFF',
         borderRadius: 12,
         padding: 16,
         alignItems: 'flex-start',
     },
     metricLabel: {
         fontSize: 12,
-        color: '#8E8E93',
         marginTop: 8,
     },
     metricValue: {
         fontSize: 24,
         fontWeight: '600',
-        color: '#000',
         marginTop: 4,
     },
     metricGoal: {
         fontSize: 12,
-        color: '#8E8E93',
     },
     movingCard: {
-        backgroundColor: '#FFFFFF',
         marginHorizontal: 16,
         marginTop: 12,
         borderRadius: 12,
@@ -399,7 +460,6 @@ const styles = StyleSheet.create({
     },
     movingText: {
         fontSize: 16,
-        color: '#007AFF',
         fontWeight: '500',
     },
     detailCards: {
@@ -411,7 +471,6 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
     },
     detailCard: {
-        backgroundColor: '#FFFFFF',
         borderRadius: 12,
         padding: 10,
         width: (width - 44) / 2, // Two cards per row with 16px padding and 16px gap
@@ -426,17 +485,14 @@ const styles = StyleSheet.create({
     cardTitle: {
         fontSize: 18,
         fontWeight: '600',
-        color: '#000',
     },
     cardValue: {
         fontSize: 32,
         fontWeight: '600',
-        color: '#000',
         marginBottom: 4,
     },
     cardSubtext: {
         fontSize: 14,
-        color: '#8E8E93',
         marginBottom: 16,
     },
     qualityBarContainer: {
@@ -444,7 +500,6 @@ const styles = StyleSheet.create({
     },
     qualityBar: {
         height: 6,
-        backgroundColor: '#E5E5EA',
         borderRadius: 3,
         position: 'relative',
     },
@@ -453,7 +508,6 @@ const styles = StyleSheet.create({
         left: 0,
         top: 0,
         height: '100%',
-        backgroundColor: '#5E5CE6',
         borderRadius: 3,
     },
     qualityIndicator: {
@@ -461,10 +515,8 @@ const styles = StyleSheet.create({
         top: -4,
         width: 14,
         height: 14,
-        backgroundColor: '#5E5CE6',
         borderRadius: 7,
         borderWidth: 2,
-        borderColor: '#FFFFFF',
         marginLeft: -7,
     },
     qualityLabels: {
@@ -474,7 +526,6 @@ const styles = StyleSheet.create({
     },
     qualityLabel: {
         fontSize: 12,
-        color: '#8E8E93',
     },
     chartContainer: {
         marginTop: 8,

@@ -5,25 +5,79 @@
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+const tintColorLight = '#fd570aff';
+const tintColorDark = '#ff7a3dff';
 
 export const Colors = {
   light: {
-    text: '#11181C',
-    background: '#fff',
+    // Primary colors
+    text: '#000000',
+    textSecondary: '#8E8E93',
+    background: '#F2F2F7',
+    cardBackground: '#FFFFFF',
     tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
+
+    // Tab bar
+    tabIconDefault: '#8E8E93',
     tabIconSelected: tintColorLight,
+    tabBarBackground: '#FFFFFF',
+    tabBarBorder: '#E5E5EA',
+
+    // Health metrics
+    caloriesColor: '#FF453A',
+    stepsColor: '#34C759',
+    standingColor: '#FFD60A',
+    heartRateColor: '#FF453A',
+    sleepColor: '#5E5CE6',
+    spO2Color: '#FF453A',
+    weightColor: '#34C759',
+
+    // UI elements
+    border: '#E5E5EA',
+    divider: '#F2F2F7',
+    placeholder: '#C7C7CC',
+    overlay: 'rgba(0, 0, 0, 0.4)',
+
+    // Status colors
+    success: '#34C759',
+    warning: '#FF9500',
+    error: '#FF453A',
+    info: '#007AFF',
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
+    // Primary colors
+    text: '#FFFFFF',
+    textSecondary: '#98989D',
+    background: '#000000',
+    cardBackground: '#1C1C1E',
     tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
+
+    // Tab bar
+    tabIconDefault: '#98989D',
     tabIconSelected: tintColorDark,
+    tabBarBackground: '#1C1C1E',
+    tabBarBorder: '#38383A',
+
+    // Health metrics (brighter for dark mode)
+    caloriesColor: '#FF6961',
+    stepsColor: '#32D74B',
+    standingColor: '#FFD60A',
+    heartRateColor: '#FF6961',
+    sleepColor: '#5E5CE6',
+    spO2Color: '#FF6961',
+    weightColor: '#30D158',
+
+    // UI elements
+    border: '#38383A',
+    divider: '#2C2C2E',
+    placeholder: '#48484A',
+    overlay: 'rgba(0, 0, 0, 0.7)',
+
+    // Status colors
+    success: '#30D158',
+    warning: '#FF9F0A',
+    error: '#FF453A',
+    info: '#0A84FF',
   },
 };
 
