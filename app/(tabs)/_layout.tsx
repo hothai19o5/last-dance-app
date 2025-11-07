@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { useThemeColors } from '@/contexts/ThemeContext';
+import { View } from 'react-native-reanimated/lib/typescript/Animated';
 
 export default function TabLayout() {
   const colors = useThemeColors();
@@ -18,7 +19,7 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: colors.tabBarBackground,
           borderTopColor: colors.tabBarBorder,
-          height: 85,
+          height: 70,
           paddingBottom: 25,
           paddingTop: 10,
         },

@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { mockHealthMetrics, mockSleepData, mockHeartRateData, mockSpO2Data, mockWeightData } from '../../data/mockData';
 import { BarChart, LineChart } from 'react-native-gifted-charts';
 import { useTheme, useThemeColors } from '../../contexts/ThemeContext';
@@ -47,28 +48,6 @@ export default function HealthScreen() {
     // Calculate cookies earned (1 cookie per 50 calories)
     const cookiesEarned = Math.floor(calories.current / 50);
 
-    // Prepare gauge data (sorted from outer to inner: Steps, Standing, Calories)
-    const gaugeData = [
-        {
-            value: steps.current,
-            maxValue: steps.goal,
-            color: '#34C759',
-            label: 'Steps',
-        },
-        {
-            value: standing.current,
-            maxValue: standing.goal,
-            color: '#FFD60A',
-            label: 'Standing',
-        },
-        {
-            value: calories.current,
-            maxValue: calories.goal,
-            color: '#FF453A',
-            label: 'Calories',
-        },
-    ];
-
     // Prepare heart rate chart data
     const heartRateChartData = mockHeartRateData.history.slice(-12).map((bpm, index) => ({
         value: bpm,
@@ -94,227 +73,250 @@ export default function HealthScreen() {
     return (
         <Animated.ScrollView
             style={[styles.container, { backgroundColor: colors.background, opacity: fadeAnim }]}
-            showsVerticalScrollIndicator={false}
         >
-            {/* Header */}
-            <View style={[styles.header, { backgroundColor: colors.cardBackground }]}>
-                <Text style={[styles.headerTitle, { color: colors.text }]}>Health</Text>
-                <TouchableOpacity style={styles.addButton}>
-                    <Ionicons name="add-circle-outline" size={28} color={colors.info} />
-                </TouchableOpacity>
-            </View>
-
-            {/* Summary Circle */}
-            <View style={[styles.summaryContainer, { backgroundColor: colors.cardBackground }]}>
-                <View style={styles.circleContainer}>
-                    {/* Outer Ring - Steps */}
-                    <View style={[styles.ring, styles.ringOuter, { borderColor: colors.border }]}>
-                        <View style={[styles.ringProgress, {
-                            borderColor: colors.stepsColor,
-                            borderTopWidth: 8,
-                            borderRightWidth: stepsPercent > 25 ? 8 : 0,
-                            borderBottomWidth: stepsPercent > 50 ? 8 : 0,
-                            borderLeftWidth: stepsPercent > 75 ? 8 : 0,
-                        }]} />
-                    </View>
-
-                    {/* Middle Ring - Standing */}
-                    <View style={[styles.ring, styles.ringMiddle, { borderColor: colors.border }]}>
-                        <View style={[styles.ringProgress, {
-                            borderColor: colors.standingColor,
-                            borderTopWidth: 6,
-                            borderRightWidth: standingPercent > 25 ? 6 : 0,
-                            borderBottomWidth: standingPercent > 50 ? 6 : 0,
-                            borderLeftWidth: standingPercent > 75 ? 6 : 0,
-                        }]} />
-                    </View>
-
-                    {/* Inner Ring - Calories */}
-                    <View style={[styles.ring, styles.ringInner, { borderColor: colors.border }]}>
-                        <View style={[styles.ringProgress, {
-                            borderColor: colors.caloriesColor,
-                            borderTopWidth: 5,
-                            borderRightWidth: caloriesPercent > 25 ? 5 : 0,
-                            borderBottomWidth: caloriesPercent > 50 ? 5 : 0,
-                            borderLeftWidth: caloriesPercent > 75 ? 5 : 0,
-                        }]} />
-                    </View>
-
-                    {/* Center Content */}
-                    <View style={styles.circleCenter}>
-                        <Text style={[styles.percentText, { color: colors.text }]}>{Math.round(overallPercent)}%</Text>
-                    </View>
+            <LinearGradient
+                colors={colors.isDark ? ['rgba(0, 0, 0, 1)', 'rgba(36, 33, 33, 0.8)', 'rgba(75, 75, 82, 0.8)'] : ['rgba(255, 255, 255, 1)', 'rgba(242, 242, 247, 0.8)', 'rgba(242, 242, 247, 0)']}
+                locations={[0, 0.7, 1]}
+                style={styles.topSection}
+            >
+                {/* Header */}
+                <View style={styles.header}>
+                    <Text style={[styles.headerTitle, { color: colors.text }]}>Health</Text>
+                    <TouchableOpacity style={styles.addButton}>
+                        <Ionicons name="add-circle-outline" size={28} color={colors.info} />
+                    </TouchableOpacity>
                 </View>
 
-                {/* Achievement Card */}
-                <View style={[styles.achievementCard, { backgroundColor: colors.background }]}>
-                    <Text style={styles.cookieEmoji}>🍪</Text>
-                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.warning }}>x {cookiesEarned}</Text>
-                </View>
-            </View>
-
-            {/* Key Metrics */}
-            <View style={styles.metricsGrid}>
-                <MetricCard
-                    icon="flame"
-                    iconColor={colors.caloriesColor}
-                    label="Calories"
-                    value={calories.current}
-                    unit="kcal"
-                    goal={calories.goal}
-                    colors={colors}
-                />
-                <MetricCard
-                    icon="footsteps"
-                    iconColor={colors.stepsColor}
-                    label="Steps"
-                    value={steps.current}
-                    unit="steps"
-                    goal={steps.goal}
-                />
-                <MetricCard
-                    icon="time"
-                    iconColor={colors.standingColor}
-                    label="Standing"
-                    value={standing.current}
-                    unit="hrs"
-                    goal={standing.goal}
-                    colors={colors}
-                />
-            </View>
-
-            {/* Moving Time */}
-            <TouchableOpacity style={[styles.movingCard, { backgroundColor: colors.cardBackground }]}>
-                <View style={styles.movingContent}>
-                    <Ionicons name="walk" size={24} color={colors.info} />
-                    <Text style={[styles.movingText, { color: colors.text }]}>Moving {moving.minutes}mins</Text>
-                </View>
-            </TouchableOpacity>
-
-            {/* Detail Cards */}
-            <View style={styles.detailCards}>
-                {/* Heart Rate Card */}
-                <TouchableOpacity style={[styles.detailCard, { backgroundColor: colors.cardBackground }]}>
-                    <View style={styles.cardHeader}>
-                        <Ionicons name="heart" size={24} color={colors.heartRateColor} />
-                        <Text style={[styles.cardTitle, { color: colors.text }]}>Heart rate</Text>
-                    </View>
-                    <Text style={[styles.cardValue, { color: colors.text }]}>{mockHeartRateData.bpm} BPM</Text>
-                    <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>{mockHeartRateData.timestamp}</Text>
-
-                    {/* Heart Rate Chart */}
-                    <View style={styles.chartContainer}>
-                        <BarChart
-                            data={heartRateChartData}
-                            barWidth={10}
-                            spacing={6}
-                            barBorderRadius={4}
-                            frontColor={colors.heartRateColor}
-                            yAxisThickness={0}
-                            xAxisThickness={0}
-                            hideRules
-                            hideYAxisText
-                            height={60}
-                            width={(width - 44) / 2 - 32}
-                            noOfSections={3}
-                        />
-                    </View>
-                </TouchableOpacity>
-
-                {/* SpO2 Card */}
-                <TouchableOpacity style={[styles.detailCard, { backgroundColor: colors.cardBackground }]}>
-                    <View style={styles.cardHeader}>
-                        <Ionicons name="water" size={24} color={colors.spO2Color} />
-                        <Text style={[styles.cardTitle, { color: colors.text }]}>SpO2</Text>
-                    </View>
-                    <Text style={[styles.cardValue, { color: colors.text }]}>{mockSpO2Data.percentage} %</Text>
-                    <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>{mockSpO2Data.timestamp}</Text>
-
-                    {/* SpO2 Chart */}
-                    <View style={styles.chartContainer}>
-                        <BarChart
-                            data={spO2ChartData}
-                            barWidth={10}
-                            spacing={6}
-                            barBorderRadius={4}
-                            frontColor={colors.spO2Color}
-                            yAxisThickness={0}
-                            xAxisThickness={0}
-                            hideRules
-                            hideYAxisText
-                            height={60}
-                            width={(width - 44) / 2 - 32}
-                            noOfSections={3}
-                        />
-                    </View>
-                </TouchableOpacity>
-
-                {/* Weight Card */}
-                <TouchableOpacity style={[styles.detailCard, { backgroundColor: colors.cardBackground }]}>
-                    <View style={styles.cardHeader}>
-                        <Ionicons name="scale" size={24} color={colors.weightColor} />
-                        <Text style={[styles.cardTitle, { color: colors.text }]}>Weight</Text>
-                    </View>
-                    <Text style={[styles.cardValue, { color: colors.text }]}>{mockWeightData.weight} kg</Text>
-                    <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>{mockWeightData.date}</Text>
-
-                    {/* Weight Chart */}
-                    <View style={styles.chartContainer}>
-                        <LineChart
-                            data={weightChartData}
-                            spacing={16}
-                            yAxisThickness={0}
-                            xAxisThickness={0}
-                            hideRules
-                            hideYAxisText
-                            height={60}
-                            width={(width - 44) / 2 - 32}
-                            noOfSections={3}
-                            color={colors.weightColor}
-                            dataPointsColor={colors.weightColor}
-                            startFillColor={colors.weightColor}
-                            endFillColor={colors.weightColor}
-                            startOpacity={0.4}
-                            endOpacity={0.1}
-                        />
-                    </View>
-                </TouchableOpacity>
-
-                {/* Sleep Card */}
-                <TouchableOpacity style={[styles.detailCard, { backgroundColor: colors.cardBackground }]}>
-                    <View style={styles.cardHeader}>
-                        <Ionicons name="moon" size={24} color={colors.sleepColor} />
-                        <Text style={[styles.cardTitle, { color: colors.text }]}>Sleep</Text>
-                    </View>
-                    <Text style={[styles.cardValue, { color: colors.text }]}>{mockSleepData.duration}</Text>
-                    <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>
-                        {mockSleepData.date} {mockSleepData.quality}
-                    </Text>
-
-                    {/* Quality Bar */}
-                    <View style={styles.qualityBarContainer}>
-                        <View style={[styles.qualityBar, { backgroundColor: colors.border }]}>
-                            <View
-                                style={[
-                                    styles.qualityBarFill,
-                                    { width: `${mockSleepData.qualityScore}%`, backgroundColor: colors.sleepColor }
-                                ]}
-                            />
-                            <View
-                                style={[
-                                    styles.qualityIndicator,
-                                    { left: `${mockSleepData.qualityScore}%`, backgroundColor: colors.sleepColor }
-                                ]}
-                            />
+                {/* Summary Circle */}
+                <View style={styles.summaryContainer}>
+                    <View style={styles.circleContainer}>
+                        {/* Outer Ring - Steps */}
+                        <View style={[styles.ring, styles.ringOuter, { borderColor: colors.border }]}>
+                            <View style={[styles.ringProgress, {
+                                borderColor: colors.stepsColor,
+                                borderTopWidth: 8,
+                                borderRightWidth: stepsPercent > 25 ? 8 : 0,
+                                borderBottomWidth: stepsPercent > 50 ? 8 : 0,
+                                borderLeftWidth: stepsPercent > 75 ? 8 : 0,
+                            }]} />
                         </View>
-                        <View style={styles.qualityLabels}>
-                            <Text style={[styles.qualityLabel, { color: colors.textSecondary }]}>Poor</Text>
-                            <Text style={[styles.qualityLabel, { color: colors.textSecondary }]}>Excellent</Text>
+
+                        {/* Middle Ring - Standing */}
+                        <View style={[styles.ring, styles.ringMiddle, { borderColor: colors.border }]}>
+                            <View style={[styles.ringProgress, {
+                                borderColor: colors.standingColor,
+                                borderTopWidth: 6,
+                                borderRightWidth: standingPercent > 25 ? 6 : 0,
+                                borderBottomWidth: standingPercent > 50 ? 6 : 0,
+                                borderLeftWidth: standingPercent > 75 ? 6 : 0,
+                            }]} />
+                        </View>
+
+                        {/* Inner Ring - Calories */}
+                        <View style={[styles.ring, styles.ringInner, { borderColor: colors.border }]}>
+                            <View style={[styles.ringProgress, {
+                                borderColor: colors.caloriesColor,
+                                borderTopWidth: 5,
+                                borderRightWidth: caloriesPercent > 25 ? 5 : 0,
+                                borderBottomWidth: caloriesPercent > 50 ? 5 : 0,
+                                borderLeftWidth: caloriesPercent > 75 ? 5 : 0,
+                            }]} />
+                        </View>
+
+                        {/* Center Content */}
+                        <View style={styles.circleCenter}>
+                            <Text style={[styles.percentText, { color: colors.text }]}>{Math.round(overallPercent)}%</Text>
                         </View>
                     </View>
+
+                    {/* Achievement Card */}
+                    <View style={[styles.achievementCard, { backgroundColor: colors.cardAchievementBackground }]}>
+                        <Text style={styles.cookieEmoji}>🥯</Text>
+                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text }}>x{cookiesEarned}</Text>
+                    </View>
+                </View>
+            </LinearGradient>
+
+
+            <LinearGradient
+                colors={colors.isDark ? ['rgba(75, 75, 82, 0.8)', 'rgba(0, 0, 0, 0.8)', 'rgba(0, 0, 0, 1)'] : ['rgba(242, 242, 247, 0)', 'rgba(242, 242, 247, 0.8)', 'rgba(242, 242, 247, 1)']}
+                locations={[0, 0.3, 1]}
+                style={styles.contentSection}
+            >
+                {/* Key Metrics */}
+                <View style={styles.metricsGrid}>
+                    <MetricCard
+                        icon="flame"
+                        iconColor={colors.caloriesColor}
+                        label="Calories"
+                        value={calories.current}
+                        unit="kcal"
+                        goal={calories.goal}
+                        colors={colors}
+                    />
+                    <MetricCard
+                        icon="footsteps"
+                        iconColor={colors.stepsColor}
+                        label="Steps"
+                        value={steps.current}
+                        unit="steps"
+                        goal={steps.goal}
+                    />
+                    <MetricCard
+                        icon="time"
+                        iconColor={colors.standingColor}
+                        label="Standing"
+                        value={standing.current}
+                        unit="hrs"
+                        goal={standing.goal}
+                        colors={colors}
+                    />
+                </View>
+
+                {/* Moving Time */}
+                <TouchableOpacity style={[styles.movingCard, { backgroundColor: colors.cardBackground }]}>
+                    <View style={styles.movingContent}>
+                        <View style={[styles.circleIcon, { backgroundColor: colors.info }]}>
+                            <Ionicons name="person" size={12} color={colors.iconOnColor} />
+                        </View>
+                        <Text style={[styles.movingText, { color: colors.text }]}>Moving {moving.minutes} mins</Text>
+                    </View>
                 </TouchableOpacity>
 
-            </View>
+                {/* Detail Cards */}
+                <View style={styles.detailCards}>
+                    {/* Heart Rate Card */}
+                    <TouchableOpacity style={[styles.detailCard, { backgroundColor: colors.cardBackground }]}>
+                        <View style={styles.cardHeader}>
+                            <View style={[styles.circleIcon, { backgroundColor: colors.heartRateIconBg }]}>
+                                <Ionicons name="heart" size={12} color={colors.iconOnColor} />
+                            </View>
+                            <Text style={[styles.cardTitle, { color: colors.text }]}>Heart rate</Text>
+                        </View>
+                        <Text style={[styles.cardValue, { color: colors.text }]}>{mockHeartRateData.bpm} BPM</Text>
+                        <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>{mockHeartRateData.timestamp}</Text>
+
+                        {/* Heart Rate Chart */}
+                        <View style={styles.chartContainer}>
+                            <BarChart
+                                data={heartRateChartData}
+                                barWidth={10}
+                                spacing={6}
+                                barBorderRadius={4}
+                                frontColor={colors.heartRateColor}
+                                yAxisThickness={0}
+                                xAxisThickness={0}
+                                hideRules
+                                hideYAxisText
+                                height={60}
+                                width={(width - 44) / 2 - 32}
+                                noOfSections={3}
+                            />
+                        </View>
+                    </TouchableOpacity>
+
+                    {/* SpO2 Card */}
+                    <TouchableOpacity style={[styles.detailCard, { backgroundColor: colors.cardBackground }]}>
+                        <View style={styles.cardHeader}>
+                            <View style={[styles.circleIcon, { backgroundColor: colors.spO2IconBg }]}>
+                                <Ionicons name="water" size={12} color={colors.iconOnColor} />
+                            </View>
+                            <Text style={[styles.cardTitle, { color: colors.text }]}>SpO2</Text>
+                        </View>
+                        <Text style={[styles.cardValue, { color: colors.text }]}>{mockSpO2Data.percentage} %</Text>
+                        <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>{mockSpO2Data.timestamp}</Text>
+
+                        {/* SpO2 Chart */}
+                        <View style={styles.chartContainer}>
+                            <BarChart
+                                data={spO2ChartData}
+                                barWidth={10}
+                                spacing={6}
+                                barBorderRadius={4}
+                                frontColor={colors.spO2Color}
+                                yAxisThickness={0}
+                                xAxisThickness={0}
+                                hideRules
+                                hideYAxisText
+                                height={60}
+                                width={(width - 44) / 2 - 32}
+                                noOfSections={3}
+                            />
+                        </View>
+                    </TouchableOpacity>
+
+                    {/* Weight Card */}
+                    <TouchableOpacity style={[styles.detailCard, { backgroundColor: colors.cardBackground }]}>
+                        <View style={styles.cardHeader}>
+                            <View style={[styles.circleIcon, { backgroundColor: colors.weightIconBg }]}>
+                                <Ionicons name="scale" size={12} color={colors.iconOnColor} />
+                            </View>
+                            <Text style={[styles.cardTitle, { color: colors.text }]}>Weight</Text>
+                        </View>
+                        <Text style={[styles.cardValue, { color: colors.text }]}>{mockWeightData.weight} kg</Text>
+                        <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>{mockWeightData.date}</Text>
+
+                        {/* Weight Chart */}
+                        <View style={styles.chartContainer}>
+                            <LineChart
+                                data={weightChartData}
+                                spacing={16}
+                                yAxisThickness={0}
+                                xAxisThickness={0}
+                                hideRules
+                                hideYAxisText
+                                height={60}
+                                width={(width - 44) / 2 - 32}
+                                noOfSections={3}
+                                color={colors.weightColor}
+                                dataPointsColor={colors.weightColor}
+                                startFillColor={colors.weightColor}
+                                endFillColor={colors.weightColor}
+                                startOpacity={0.4}
+                                endOpacity={0.1}
+                            />
+                        </View>
+                    </TouchableOpacity>
+
+                    {/* Sleep Card */}
+                    <TouchableOpacity style={[styles.detailCard, { backgroundColor: colors.cardBackground }]}>
+                        <View style={styles.cardHeader}>
+                            <View style={[styles.circleIcon, { backgroundColor: colors.sleepIconBg }]}>
+                                <Ionicons name="moon" size={12} color={colors.iconOnColor} />
+                            </View>
+                            <Text style={[styles.cardTitle, { color: colors.text }]}>Sleep</Text>
+                        </View>
+                        <Text style={[styles.cardValue, { color: colors.text }]}>{mockSleepData.duration}</Text>
+                        <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>
+                            {mockSleepData.date} {mockSleepData.quality}
+                        </Text>
+
+                        {/* Quality Bar */}
+                        <View style={styles.qualityBarContainer}>
+                            <View style={[styles.qualityBar, { backgroundColor: colors.border }]}>
+                                <View
+                                    style={[
+                                        styles.qualityBarFill,
+                                        { width: `${mockSleepData.qualityScore}%`, backgroundColor: colors.sleepColor }
+                                    ]}
+                                />
+                                <View
+                                    style={[
+                                        styles.qualityIndicator,
+                                        { left: `${mockSleepData.qualityScore}%`, backgroundColor: colors.sleepColor }
+                                    ]}
+                                />
+                            </View>
+                            <View style={styles.qualityLabels}>
+                                <Text style={[styles.qualityLabel, { color: colors.textSecondary }]}>Poor</Text>
+                                <Text style={[styles.qualityLabel, { color: colors.textSecondary }]}>Excellent</Text>
+                            </View>
+                        </View>
+                    </TouchableOpacity>
+
+                </View>
+            </LinearGradient>
+
 
             {/* Bottom Spacing */}
             <View style={styles.bottomSpacing} />
@@ -337,8 +339,10 @@ const MetricCard: React.FC<MetricCardProps> = ({ icon, iconColor, label, value, 
     const themeColors = colors || useThemeColors();
     return (
         <TouchableOpacity style={[styles.metricCard, { backgroundColor: themeColors.cardBackground }]}>
-            <Ionicons name={icon} size={20} color={iconColor} />
-            <Text style={[styles.metricLabel, { color: themeColors.textSecondary }]}>{label}</Text>
+            <View style={[styles.circleIcon, { backgroundColor: iconColor }]}>
+                <Ionicons name={icon} size={14} color='#FFFFFF' />
+            </View>
+            <Text style={[styles.metricLabel, { color: themeColors.text }]}>{label}</Text>
             <Text style={[styles.metricValue, { color: themeColors.text }]}>{value}</Text>
             <Text style={[styles.metricGoal, { color: themeColors.textSecondary }]}>/{goal}{unit}</Text>
         </TouchableOpacity>
@@ -383,17 +387,17 @@ const styles = StyleSheet.create({
     ringOuter: {
         width: 180,
         height: 180,
-        borderWidth: 8,
+        borderWidth: 0,
     },
     ringMiddle: {
         width: 150,
         height: 150,
-        borderWidth: 6,
+        borderWidth: 0,
     },
     ringInner: {
         width: 120,
         height: 120,
-        borderWidth: 5,
+        borderWidth: 0,
     },
     ringProgress: {
         width: '100%',
@@ -410,18 +414,25 @@ const styles = StyleSheet.create({
         fontSize: 28,
         fontWeight: '600',
     },
-    // i want achievement card in bottom right corner of summary container
     achievementCard: {
         position: 'absolute',
         right: 20,
         bottom: 16,
-        borderRadius: 12,
-        padding: 12,
+        borderRadius: 30,
+        padding: 8,
+        paddingLeft: 12,
+        paddingRight: 12,
         flexDirection: 'column',
         alignItems: 'center',
     },
     cookieEmoji: {
         fontSize: 40,
+    },
+    topSection: {
+        // Gradient will be applied via LinearGradient component
+    },
+    contentSection: {
+        // Gradient will be applied via LinearGradient component
     },
     metricsGrid: {
         flexDirection: 'row',
@@ -436,7 +447,8 @@ const styles = StyleSheet.create({
         alignItems: 'flex-start',
     },
     metricLabel: {
-        fontSize: 12,
+        fontSize: 16,
+        fontWeight: 'bold',
         marginTop: 8,
     },
     metricValue: {
@@ -445,7 +457,8 @@ const styles = StyleSheet.create({
         marginTop: 4,
     },
     metricGoal: {
-        fontSize: 12,
+        fontSize: 14,
+        fontWeight: 'bold',
     },
     movingCard: {
         marginHorizontal: 16,
@@ -460,7 +473,7 @@ const styles = StyleSheet.create({
     },
     movingText: {
         fontSize: 16,
-        fontWeight: '500',
+        fontWeight: 'bold',
     },
     detailCards: {
         paddingHorizontal: 16,
@@ -482,12 +495,19 @@ const styles = StyleSheet.create({
         gap: 8,
         marginBottom: 12,
     },
+    circleIcon: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     cardTitle: {
         fontSize: 18,
         fontWeight: '600',
     },
     cardValue: {
-        fontSize: 32,
+        fontSize: 18,
         fontWeight: '600',
         marginBottom: 4,
     },
@@ -532,6 +552,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     bottomSpacing: {
-        height: 100,
+        height: 50,
     },
 });

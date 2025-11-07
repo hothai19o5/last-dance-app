@@ -15,6 +15,7 @@ export const Colors = {
     textSecondary: '#8E8E93',
     background: '#F2F2F7',
     cardBackground: '#FFFFFF',
+    cardAchievementBackground: '#d4d4e7ff',
     tint: tintColorLight,
 
     // Tab bar
@@ -30,7 +31,16 @@ export const Colors = {
     heartRateColor: '#FF453A',
     sleepColor: '#5E5CE6',
     spO2Color: '#FF453A',
-    weightColor: '#34C759',
+    weightColor: '#26c949ff',
+
+    // Icon backgrounds
+    heartRateIconBg: '#FF453A',
+    sleepIconBg: '#5E5CE6',
+    spO2IconBg: '#FF453A',
+    weightIconBg: '#34C759',
+
+    // Icon colors (on colored backgrounds)
+    iconOnColor: '#FFFFFF',
 
     // UI elements
     border: '#E5E5EA',
@@ -50,6 +60,7 @@ export const Colors = {
     textSecondary: '#98989D',
     background: '#000000',
     cardBackground: '#1C1C1E',
+    cardAchievementBackground: '#262631ff',
     tint: tintColorDark,
 
     // Tab bar
@@ -66,6 +77,15 @@ export const Colors = {
     sleepColor: '#5E5CE6',
     spO2Color: '#FF6961',
     weightColor: '#30D158',
+
+    // Icon backgrounds
+    heartRateIconBg: '#FF6961',
+    sleepIconBg: '#5E5CE6',
+    spO2IconBg: '#FF6961',
+    weightIconBg: '#30D158',
+
+    // Icon colors (on colored backgrounds)
+    iconOnColor: '#FFFFFF',
 
     // UI elements
     border: '#38383A',

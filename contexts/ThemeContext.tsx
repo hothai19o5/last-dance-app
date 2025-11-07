@@ -88,7 +88,7 @@ export function useTheme() {
 
 // Hook to get themed colors
 export function useThemeColors() {
-    const { colorScheme } = useTheme();
+    const { colorScheme, isDark } = useTheme();
     const { Colors } = require('../constants/theme');
-    return Colors[colorScheme];
+    return { ...Colors[colorScheme], isDark };
 }
