@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "my-first-app",
-    "slug": "my-first-app",
+    "slug": "last-dance",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -71,6 +71,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "44b79e0f-be7a-43e7-8514-1d981a7ec376"
+      }
+    },
+    "owner": "hothai"
   }
 }

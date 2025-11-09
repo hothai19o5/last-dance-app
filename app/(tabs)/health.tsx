@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import ActivityRings from "react-native-activity-rings";
+import ActivityRings from '../../components/ActivityRings';
 import { mockHealthMetrics, mockSleepData, mockHeartRateData, mockSpO2Data, mockWeightData } from '../../data/mockData';
 import { BarChart, LineChart } from 'react-native-gifted-charts';
 import { useTheme, useThemeColors } from '../../contexts/ThemeContext';
@@ -56,22 +56,25 @@ export default function HealthScreen() {
         {
             value: stepsPercent / 100 > 1 ? 1 : stepsPercent / 100,
             color: colors.stepsColor,
+            backgroundColor: colors.border,
         },
         {
             value: standingPercent / 100 > 1 ? 1 : standingPercent / 100,
             color: colors.standingColor,
+            backgroundColor: colors.border,
         },
         {
             value: caloriesPercent / 100 > 1 ? 1 : caloriesPercent / 100,
             color: colors.caloriesColor,
+            backgroundColor: colors.border,
         },
     ];
 
     const activityConfig = {
         width: 200,
         height: 200,
-        radius: 24,
-        ringSize: 20,
+        radius: 80,
+        ringSize: 16,
     };
     const heartRateChartData = mockHeartRateData.history.slice(-12).map((bpm, index) => ({
         value: bpm,
