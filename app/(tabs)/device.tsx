@@ -1,14 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { mockWearableDevice, mockWatchFaces } from '../../data/mockData';
 import { BLEService } from '../../services/bleService';
 import { useTheme, useThemeColors } from '../../contexts/ThemeContext';
 
 export default function DeviceScreen() {
     const colors = useThemeColors();
+    const router = useRouter();
     const { themeTransition } = useTheme();
     const [device, setDevice] = useState(mockWearableDevice);
+    const [hasDevice, setHasDevice] = useState(false); // Set to false for no device state
     const [syncing, setSyncing] = useState(false);
     const fadeAnim = useRef(new Animated.Value(1)).current;
 
@@ -51,14 +54,53 @@ export default function DeviceScreen() {
     };
 
     const handleAddDevice = () => {
-        Alert.alert('Add Device', 'Device scanning will be implemented here.');
-        // In production: Navigate to device pairing screen
+        // Navigate to scan devices screen
+        router.push('/scan-devices');
     };
 
     const handleWatchFaceSelect = (watchFace: any) => {
         Alert.alert('Watch Face', `Selected: ${watchFace.name}`);
     };
 
+    // Render when no device is connected
+    if (!hasDevice) {
+        return (
+            <Animated.ScrollView
+                style={[styles.container, { backgroundColor: colors.background, opacity: fadeAnim }]}
+                showsVerticalScrollIndicator={false}
+            >
+                {/* Header */}
+                <View style={[styles.header]}>
+                    <Text style={[styles.headerTitle, { color: colors.text }]}>Wearables</Text>
+                    <TouchableOpacity
+                        style={styles.addButton}
+                        onPress={() => setHasDevice(!hasDevice)}
+                    >
+                        <Ionicons name="add-circle-outline" size={28} color={colors.info} />
+                    </TouchableOpacity>
+                </View>
+
+                {/* No Device Card */}
+                <View style={styles.noDeviceContainer}>
+                    <View style={[styles.noDeviceCard, { backgroundColor: colors.cardBackground }]}>
+                        <Image
+                            source={require('../../assets/images/device.png')}
+                            style={styles.deviceImage}
+                            resizeMode="contain"
+                        />
+                        <TouchableOpacity
+                            style={[styles.addDeviceButton, { backgroundColor: colors.tint }]}
+                            onPress={handleAddDevice}
+                        >
+                            <Text style={styles.addDeviceButtonText}>Add Device</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Animated.ScrollView>
+        );
+    }
+
+    // Render when device is connected
     return (
         <Animated.ScrollView
             style={[styles.container, { backgroundColor: colors.background, opacity: fadeAnim }]}
@@ -67,9 +109,17 @@ export default function DeviceScreen() {
             {/* Header */}
             <View style={[styles.header, { backgroundColor: colors.cardBackground }]}>
                 <Text style={[styles.headerTitle, { color: colors.text }]}>Wearables</Text>
-                <TouchableOpacity style={styles.addButton} onPress={handleAddDevice}>
-                    <Ionicons name="add-circle-outline" size={28} color={colors.info} />
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 12 }}>
+                    <TouchableOpacity
+                        style={styles.addButton}
+                        onPress={() => setHasDevice(!hasDevice)}
+                    >
+                        <Ionicons name="settings-outline" size={24} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.addButton} onPress={handleAddDevice}>
+                        <Ionicons name="add-circle-outline" size={28} color={colors.info} />
+                    </TouchableOpacity>
+                </View>
             </View>
 
             {/* Connected Device */}
@@ -229,8 +279,8 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 20,
-        paddingTop: 60,
-        paddingBottom: 20,
+        paddingTop: 30,
+        paddingBottom: 0,
     },
     headerTitle: {
         fontSize: 34,
@@ -238,6 +288,33 @@ const styles = StyleSheet.create({
     },
     addButton: {
         padding: 4,
+    },
+    noDeviceContainer: {
+        flex: 1,
+        paddingHorizontal: 20,
+        paddingTop: 40,
+    },
+    noDeviceCard: {
+        borderRadius: 16,
+        padding: 32,
+        alignItems: 'center',
+    },
+    deviceImage: {
+        width: 200,
+        height: 200,
+    },
+    addDeviceButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingVertical: 16,
+        paddingHorizontal: 32,
+        borderRadius: 32,
+    },
+    addDeviceButtonText: {
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: '500',
     },
     deviceContainer: {
         paddingHorizontal: 20,
