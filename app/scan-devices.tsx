@@ -29,19 +29,27 @@ export default function ScanDevicesScreen() {
         setDevices([]);
 
         try {
-            // Mock scanning - in production, use real BLE scanning
+            // Real BLE scanning
+            await BLEService.scanForDevices(
+                (device) => {
+                    // Add device to list if not already present
+                    setDevices((prevDevices) => {
+                        const exists = prevDevices.some((d) => d.id === device.id);
+                        if (!exists) {
+                            return [...prevDevices, device];
+                        }
+                        return prevDevices;
+                    });
+                },
+                10000 // Scan for 10 seconds
+            );
+
+            // Stop scanning after duration
             setTimeout(() => {
-                const mockDevices: ScannedDevice[] = [
-                    { id: '1', name: 'Smart Watch Pro', rssi: -45 },
-                    { id: '2', name: 'Fitness Band X', rssi: -60 },
-                    { id: '3', name: 'Health Tracker', rssi: -72 },
-                    { id: '4', name: 'Sport Watch', rssi: -55 },
-                ];
-                setDevices(mockDevices);
                 setScanning(false);
-            }, 2000);
-        } catch (error) {
-            Alert.alert('Error', 'Failed to start scanning');
+            }, 10000);
+        } catch (error: any) {
+            Alert.alert('Error', error.message || 'Failed to start scanning');
             setScanning(false);
         }
     };
@@ -59,9 +67,14 @@ export default function ScanDevicesScreen() {
                     text: 'Connect',
                     onPress: async () => {
                         try {
-                            // Mock connection - in production, use real BLE connection
-                            Alert.alert('Success', `Connected to ${device.name}`);
-                            router.back();
+                            // Real BLE connection
+                            const connected = await BLEService.connectToDevice(device.id);
+                            if (connected) {
+                                Alert.alert('Success', `Connected to ${device.name}`);
+                                router.back();
+                            } else {
+                                Alert.alert('Error', 'Failed to connect to device');
+                            }
                         } catch (error) {
                             Alert.alert('Error', 'Failed to connect to device');
                         }
