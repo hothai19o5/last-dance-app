@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import ActivityRings from "react-native-activity-rings";
 import { mockHealthMetrics, mockSleepData, mockHeartRateData, mockSpO2Data, mockWeightData } from '../../data/mockData';
 import { BarChart, LineChart } from 'react-native-gifted-charts';
 import { useTheme, useThemeColors } from '../../contexts/ThemeContext';
@@ -48,17 +49,36 @@ export default function HealthScreen() {
     // Calculate cookies earned (1 cookie per 50 calories)
     const cookiesEarned = Math.floor(calories.current / 50);
 
-    // Prepare heart rate chart data
+    // Prepare ActivityRings data
+    const activityData = [
+        {
+            value: stepsPercent / 100 > 1 ? 1 : stepsPercent / 100,
+            color: colors.stepsColor,
+        },
+        {
+            value: standingPercent / 100 > 1 ? 1 : standingPercent / 100,
+            color: colors.standingColor,
+        },
+        {
+            value: caloriesPercent / 100 > 1 ? 1 : caloriesPercent / 100,
+            color: colors.caloriesColor,
+        },
+    ];
+
+    const activityConfig = {
+        width: 200,
+        height: 200,
+        radius: 24,
+        ringSize: 20,
+    };
     const heartRateChartData = mockHeartRateData.history.slice(-12).map((bpm, index) => ({
         value: bpm,
-        label: index % 3 === 0 ? `${index}h` : '',
     }));
 
     // Prepare SpO2 chart data (fall back to empty array if not available)
     const spO2ChartData = mockSpO2Data && mockSpO2Data.history
         ? mockSpO2Data.history.slice(-12).map((val, index) => ({
             value: val,
-            label: index % 3 === 0 ? `${index}h` : '',
         }))
         : [];
 
@@ -77,7 +97,6 @@ export default function HealthScreen() {
             <LinearGradient
                 colors={colors.isDark ? ['rgba(0, 0, 0, 1)', 'rgba(36, 33, 33, 0.8)', 'rgba(75, 75, 82, 0.8)'] : ['rgba(255, 255, 255, 1)', 'rgba(242, 242, 247, 0.8)', 'rgba(242, 242, 247, 0)']}
                 locations={[0, 0.7, 1]}
-                style={styles.topSection}
             >
                 {/* Header */}
                 <View style={styles.header}>
@@ -89,45 +108,10 @@ export default function HealthScreen() {
 
                 {/* Summary Circle */}
                 <View style={styles.summaryContainer}>
-                    <View style={styles.circleContainer}>
-                        {/* Outer Ring - Steps */}
-                        <View style={[styles.ring, styles.ringOuter, { borderColor: colors.border }]}>
-                            <View style={[styles.ringProgress, {
-                                borderColor: colors.stepsColor,
-                                borderTopWidth: 8,
-                                borderRightWidth: stepsPercent > 25 ? 8 : 0,
-                                borderBottomWidth: stepsPercent > 50 ? 8 : 0,
-                                borderLeftWidth: stepsPercent > 75 ? 8 : 0,
-                            }]} />
-                        </View>
-
-                        {/* Middle Ring - Standing */}
-                        <View style={[styles.ring, styles.ringMiddle, { borderColor: colors.border }]}>
-                            <View style={[styles.ringProgress, {
-                                borderColor: colors.standingColor,
-                                borderTopWidth: 6,
-                                borderRightWidth: standingPercent > 25 ? 6 : 0,
-                                borderBottomWidth: standingPercent > 50 ? 6 : 0,
-                                borderLeftWidth: standingPercent > 75 ? 6 : 0,
-                            }]} />
-                        </View>
-
-                        {/* Inner Ring - Calories */}
-                        <View style={[styles.ring, styles.ringInner, { borderColor: colors.border }]}>
-                            <View style={[styles.ringProgress, {
-                                borderColor: colors.caloriesColor,
-                                borderTopWidth: 5,
-                                borderRightWidth: caloriesPercent > 25 ? 5 : 0,
-                                borderBottomWidth: caloriesPercent > 50 ? 5 : 0,
-                                borderLeftWidth: caloriesPercent > 75 ? 5 : 0,
-                            }]} />
-                        </View>
-
-                        {/* Center Content */}
-                        <View style={styles.circleCenter}>
-                            <Text style={[styles.percentText, { color: colors.text }]}>{Math.round(overallPercent)}%</Text>
-                        </View>
-                    </View>
+                    <ActivityRings
+                        data={activityData}
+                        config={activityConfig}
+                    />
 
                     {/* Achievement Card */}
                     <View style={[styles.achievementCard, { backgroundColor: colors.cardAchievementBackground }]}>
@@ -141,7 +125,6 @@ export default function HealthScreen() {
             <LinearGradient
                 colors={colors.isDark ? ['rgba(75, 75, 82, 0.8)', 'rgba(0, 0, 0, 0.8)', 'rgba(0, 0, 0, 1)'] : ['rgba(242, 242, 247, 0)', 'rgba(242, 242, 247, 0.8)', 'rgba(242, 242, 247, 1)']}
                 locations={[0, 0.3, 1]}
-                style={styles.contentSection}
             >
                 {/* Key Metrics */}
                 <View style={styles.metricsGrid}>
@@ -200,8 +183,8 @@ export default function HealthScreen() {
                         <View style={styles.chartContainer}>
                             <BarChart
                                 data={heartRateChartData}
-                                barWidth={10}
-                                spacing={6}
+                                barWidth={6}
+                                spacing={5}
                                 barBorderRadius={4}
                                 frontColor={colors.heartRateColor}
                                 yAxisThickness={0}
@@ -230,8 +213,8 @@ export default function HealthScreen() {
                         <View style={styles.chartContainer}>
                             <BarChart
                                 data={spO2ChartData}
-                                barWidth={10}
-                                spacing={6}
+                                barWidth={6}
+                                spacing={5}
                                 barBorderRadius={4}
                                 frontColor={colors.spO2Color}
                                 yAxisThickness={0}
@@ -358,8 +341,8 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 20,
-        paddingTop: 60,
-        paddingBottom: 20,
+        paddingTop: 30,
+        paddingBottom: 0,
     },
     headerTitle: {
         fontSize: 34,
@@ -369,50 +352,10 @@ const styles = StyleSheet.create({
         padding: 4,
     },
     summaryContainer: {
-        paddingVertical: 30,
+        paddingVertical: 0,
         alignItems: 'center',
         position: 'relative',
-    },
-    circleContainer: {
-        width: 180,
-        height: 180,
         justifyContent: 'center',
-        alignItems: 'center',
-    },
-    ring: {
-        position: 'absolute',
-        borderRadius: 100,
-        backgroundColor: 'transparent',
-    },
-    ringOuter: {
-        width: 180,
-        height: 180,
-        borderWidth: 0,
-    },
-    ringMiddle: {
-        width: 150,
-        height: 150,
-        borderWidth: 0,
-    },
-    ringInner: {
-        width: 120,
-        height: 120,
-        borderWidth: 0,
-    },
-    ringProgress: {
-        width: '100%',
-        height: '100%',
-        borderRadius: 100,
-        borderColor: 'transparent',
-        transform: [{ rotate: '-90deg' }],
-    },
-    circleCenter: {
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    percentText: {
-        fontSize: 28,
-        fontWeight: '600',
     },
     achievementCard: {
         position: 'absolute',
@@ -428,16 +371,9 @@ const styles = StyleSheet.create({
     cookieEmoji: {
         fontSize: 40,
     },
-    topSection: {
-        // Gradient will be applied via LinearGradient component
-    },
-    contentSection: {
-        // Gradient will be applied via LinearGradient component
-    },
     metricsGrid: {
         flexDirection: 'row',
         paddingHorizontal: 16,
-        paddingTop: 16,
         gap: 12,
     },
     metricCard: {
