@@ -1,11 +1,12 @@
-import React, { useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated } from 'react-native';
+import React, { useRef, useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import ActivityRings from "react-native-activity-rings";
 import { mockHealthMetrics, mockSleepData, mockHeartRateData, mockSpO2Data, mockWeightData } from '../../data/mockData';
 import { BarChart, LineChart } from 'react-native-gifted-charts';
 import { useTheme, useThemeColors } from '../../contexts/ThemeContext';
+import AddMenuToggle from '../../components/AddMenuToggle';
 
 const { width } = Dimensions.get('window');
 
@@ -14,6 +15,7 @@ export default function HealthScreen() {
     const colors = useThemeColors();
     const { themeTransition } = useTheme();
     const fadeAnim = useRef(new Animated.Value(1)).current;
+    const [showAddMenu, setShowAddMenu] = useState(false);
 
     // Fade animation on theme change
     useEffect(() => {
@@ -90,6 +92,34 @@ export default function HealthScreen() {
         }))
         : [];
 
+    // Menu items for add button
+    const menuItems = [
+        {
+            icon: 'fitness' as const,
+            iconColor: colors.heartRateColor,
+            title: 'Add Workout',
+            onPress: () => Alert.alert('Add Workout', 'Add a new workout session'),
+        },
+        {
+            icon: 'water' as const,
+            iconColor: colors.info,
+            title: 'Log Water Intake',
+            onPress: () => Alert.alert('Water Intake', 'Log your water consumption'),
+        },
+        {
+            icon: 'restaurant' as const,
+            iconColor: colors.warning,
+            title: 'Add Meal',
+            onPress: () => Alert.alert('Add Meal', 'Log your meal and calories'),
+        },
+        {
+            icon: 'analytics' as const,
+            iconColor: colors.success,
+            title: 'Manual Entry',
+            onPress: () => Alert.alert('Manual Entry', 'Manually enter health data'),
+        },
+    ];
+
     return (
         <Animated.ScrollView
             style={[styles.container, { backgroundColor: colors.background, opacity: fadeAnim }]}
@@ -101,7 +131,7 @@ export default function HealthScreen() {
                 {/* Header */}
                 <View style={styles.header}>
                     <Text style={[styles.headerTitle, { color: colors.text }]}>Health</Text>
-                    <TouchableOpacity style={styles.addButton}>
+                    <TouchableOpacity style={styles.addButton} onPress={() => setShowAddMenu(true)}>
                         <Ionicons name="add-circle-outline" size={28} color={colors.info} />
                     </TouchableOpacity>
                 </View>
@@ -303,6 +333,14 @@ export default function HealthScreen() {
 
             {/* Bottom Spacing */}
             <View style={styles.bottomSpacing} />
+
+            {/* Add Menu Toggle */}
+            <AddMenuToggle
+                visible={showAddMenu}
+                onClose={() => setShowAddMenu(false)}
+                menuItems={menuItems}
+                title="Add Health Data"
+            />
         </Animated.ScrollView>
     );
 }

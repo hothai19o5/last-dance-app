@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { mockWearableDevice, mockWatchFaces } from '../../data/mockData';
 import { BLEService } from '../../services/bleService';
 import { useTheme, useThemeColors } from '../../contexts/ThemeContext';
+import AddMenuToggle from '../../components/AddMenuToggle';
 
 export default function DeviceScreen() {
     const colors = useThemeColors();
@@ -13,6 +14,7 @@ export default function DeviceScreen() {
     const [device, setDevice] = useState(mockWearableDevice);
     const [hasDevice, setHasDevice] = useState(false); // Set to false for no device state
     const [syncing, setSyncing] = useState(false);
+    const [showAddMenu, setShowAddMenu] = useState(false);
     const fadeAnim = useRef(new Animated.Value(1)).current;
 
     // Fade animation on theme change
@@ -62,6 +64,28 @@ export default function DeviceScreen() {
         Alert.alert('Watch Face', `Selected: ${watchFace.name}`);
     };
 
+    // Menu items for add button
+    const menuItems = [
+        {
+            icon: 'watch' as const,
+            iconColor: colors.info,
+            title: 'Add Device',
+            onPress: handleAddDevice,
+        },
+        {
+            icon: 'bluetooth' as const,
+            iconColor: colors.stepsColor,
+            title: 'Scan Bluetooth Devices',
+            onPress: () => router.push('/scan-devices'),
+        },
+        {
+            icon: 'sync' as const,
+            iconColor: colors.success,
+            title: 'Sync Data',
+            onPress: handleSync,
+        },
+    ];
+
     // Render when no device is connected
     if (!hasDevice) {
         return (
@@ -72,9 +96,10 @@ export default function DeviceScreen() {
                 {/* Header */}
                 <View style={[styles.header]}>
                     <Text style={[styles.headerTitle, { color: colors.text }]}>Wearables</Text>
+                    {/* When press button -> toggle add-new-device -> handle similar when press addDeviceButton */}
                     <TouchableOpacity
                         style={styles.addButton}
-                        onPress={() => setHasDevice(!hasDevice)}
+                        onPress={() => setShowAddMenu(true)}
                     >
                         <Ionicons name="add-circle-outline" size={28} color={colors.info} />
                     </TouchableOpacity>
@@ -96,6 +121,14 @@ export default function DeviceScreen() {
                         </TouchableOpacity>
                     </View>
                 </View>
+
+                {/* Add Menu Toggle */}
+                <AddMenuToggle
+                    visible={showAddMenu}
+                    onClose={() => setShowAddMenu(false)}
+                    menuItems={menuItems}
+                    title="Quick Actions"
+                />
             </Animated.ScrollView>
         );
     }
@@ -116,7 +149,7 @@ export default function DeviceScreen() {
                     >
                         <Ionicons name="settings-outline" size={24} color={colors.textSecondary} />
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.addButton} onPress={handleAddDevice}>
+                    <TouchableOpacity style={styles.addButton} onPress={() => setShowAddMenu(true)}>
                         <Ionicons name="add-circle-outline" size={28} color={colors.info} />
                     </TouchableOpacity>
                 </View>
@@ -233,6 +266,14 @@ export default function DeviceScreen() {
             </View>
 
             <View style={styles.bottomSpacing} />
+
+            {/* Add Menu Toggle */}
+            <AddMenuToggle
+                visible={showAddMenu}
+                onClose={() => setShowAddMenu(false)}
+                menuItems={menuItems}
+                title="Quick Actions"
+            />
         </Animated.ScrollView>
     );
 }

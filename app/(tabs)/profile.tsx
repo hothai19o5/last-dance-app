@@ -3,12 +3,14 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal } fr
 import { Ionicons } from '@expo/vector-icons';
 import { mockUserProfile } from '../../data/mockData';
 import { useTheme, useThemeColors } from '../../contexts/ThemeContext';
+import AddMenuToggle from '../../components/AddMenuToggle';
 
 export default function ProfileScreen() {
     const profile = mockUserProfile;
     const { themeMode, setThemeMode } = useTheme();
     const colors = useThemeColors();
     const [showThemeModal, setShowThemeModal] = useState(false);
+    const [showAddMenu, setShowAddMenu] = useState(false);
 
     const handleEditProfile = () => {
         Alert.alert('Edit Profile', 'Profile editing will be implemented here.');
@@ -23,11 +25,42 @@ export default function ProfileScreen() {
         setShowThemeModal(false);
     };
 
+    // Menu items for add button
+    const menuItems = [
+        {
+            icon: 'person-add' as const,
+            iconColor: colors.info,
+            title: 'Edit Profile',
+            onPress: handleEditProfile,
+        },
+        {
+            icon: 'trophy' as const,
+            iconColor: colors.warning,
+            title: 'Add Achievement',
+            onPress: () => Alert.alert('Achievement', 'Add a new achievement'),
+        },
+        {
+            icon: 'people' as const,
+            iconColor: colors.success,
+            title: 'Invite Friends',
+            onPress: () => Alert.alert('Invite', 'Invite friends to compete'),
+        },
+        {
+            icon: 'share-social' as const,
+            iconColor: colors.stepsColor,
+            title: 'Share Progress',
+            onPress: () => Alert.alert('Share', 'Share your progress on social media'),
+        },
+    ];
+
     return (
         <ScrollView style={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
             {/* Header */}
             <View style={[styles.header, { backgroundColor: colors.cardBackground }]}>
                 <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
+                <TouchableOpacity style={styles.addButton} onPress={() => setShowAddMenu(true)}>
+                    <Ionicons name="add-circle-outline" size={28} color={colors.info} />
+                </TouchableOpacity>
             </View>
 
             {/* User Info Card */}
@@ -174,6 +207,14 @@ export default function ProfileScreen() {
             </Modal>
 
             <View style={styles.bottomSpacing} />
+
+            {/* Add Menu Toggle */}
+            <AddMenuToggle
+                visible={showAddMenu}
+                onClose={() => setShowAddMenu(false)}
+                menuItems={menuItems}
+                title="Quick Actions"
+            />
         </ScrollView>
     );
 }
@@ -208,6 +249,9 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
         paddingHorizontal: 20,
         paddingTop: 60,
         paddingBottom: 20,
@@ -215,6 +259,9 @@ const styles = StyleSheet.create({
     headerTitle: {
         fontSize: 34,
         fontWeight: 'bold',
+    },
+    addButton: {
+        padding: 4,
     },
     userCard: {
         flexDirection: 'row',
