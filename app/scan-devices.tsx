@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useThemeColors } from '../contexts/ThemeContext';
 import { BLEService } from '../services/bleService';
 
@@ -117,16 +118,19 @@ export default function ScanDevicesScreen() {
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
+            {/* Hide default header */}
+            <Stack.Screen options={{ headerShown: false }} />
+
             {/* Header */}
-            <View style={[styles.header, { backgroundColor: colors.cardBackground, borderBottomColor: colors.border }]}>
+            <View style={[styles.header]}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={24} color={colors.text} />
+                    <Ionicons name="arrow-back" size={32} color={colors.text} />
                 </TouchableOpacity>
                 <Text style={[styles.headerTitle, { color: colors.text }]}>Scan Devices</Text>
                 <TouchableOpacity onPress={startScanning} disabled={scanning}>
                     <Ionicons
                         name="refresh"
-                        size={24}
+                        size={32}
                         color={scanning ? colors.textSecondary : colors.info}
                     />
                 </TouchableOpacity>
@@ -181,20 +185,20 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 20,
-        paddingTop: 60,
-        paddingBottom: 16,
-        borderBottomWidth: 1,
+        paddingTop: 30,
+        paddingBottom: 0,
     },
     backButton: {
         padding: 4,
     },
     headerTitle: {
-        fontSize: 20,
-        fontWeight: '600',
+        fontSize: 32,
+        fontWeight: 'bold',
         flex: 1,
-        marginLeft: 16,
+        marginLeft: 12,
     },
     scanningContainer: {
+        marginTop: 40,
         margin: 20,
         padding: 32,
         borderRadius: 12,

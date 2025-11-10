@@ -82,10 +82,10 @@ export const mockWatchFaces: WatchFace[] = [
 
 // Mock User Profile
 export const mockUserProfile: UserProfile = {
-    id: '777',
-    name: '777',
-    gender: 'Female',
-    height: 165,
-    age: 22,
-    weight: 55,
+    id: '1',
+    name: 'Ho Xuan Thai',
+    gender: 'Male',
+    height: 177,
+    age: 21,
+    weight: 68,
 };

@@ -56,7 +56,7 @@ export default function ProfileScreen() {
     return (
         <ScrollView style={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
             {/* Header */}
-            <View style={[styles.header, { backgroundColor: colors.cardBackground }]}>
+            <View style={[styles.header]}>
                 <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
                 <TouchableOpacity style={styles.addButton} onPress={() => setShowAddMenu(true)}>
                     <Ionicons name="add-circle-outline" size={28} color={colors.info} />
@@ -64,14 +64,14 @@ export default function ProfileScreen() {
             </View>
 
             {/* User Info Card */}
-            <TouchableOpacity style={[styles.userCard, { backgroundColor: colors.cardBackground }]} onPress={handleEditProfile}>
+            <TouchableOpacity style={[styles.userCard]} onPress={handleEditProfile}>
                 <View style={[styles.userAvatar, { backgroundColor: colors.background }]}>
                     <Ionicons name="person" size={40} color={colors.textSecondary} />
                 </View>
                 <View style={styles.userInfo}>
-                    <Text style={[styles.userId, { color: colors.text }]}>{profile.id}</Text>
+                    <Text style={[styles.userId, { color: colors.text }]}>{profile.name}</Text>
                     <Text style={[styles.userDetails, { color: colors.textSecondary }]}>
-                        {profile.gender} | {profile.height}cm | {profile.age}
+                        {profile.gender}   {profile.height} cm   {profile.age}
                     </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color={colors.placeholder} />
@@ -80,12 +80,12 @@ export default function ProfileScreen() {
             {/* Competition Card */}
             <TouchableOpacity style={[styles.competitionCard, { backgroundColor: colors.cardBackground }]} onPress={handleCompetition}>
                 <View style={styles.competitionContent}>
+                    <View style={styles.trophyIcon}>
+                        <Text style={styles.trophyEmoji}><Ionicons name="trophy" size={32} color="#fd570aff" /></Text>
+                    </View>
                     <View style={styles.competitionLeft}>
                         <Text style={[styles.competitionTitle, { color: colors.text }]}>Competition</Text>
                         <Text style={[styles.competitionStatus, { color: colors.textSecondary }]}>Competition in progress</Text>
-                    </View>
-                    <View style={styles.trophyIcon}>
-                        <Text style={styles.trophyEmoji}>🏆</Text>
                     </View>
                 </View>
             </TouchableOpacity>
@@ -253,8 +253,8 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 20,
-        paddingTop: 60,
-        paddingBottom: 20,
+        paddingTop: 30,
+        paddingBottom: 0,
     },
     headerTitle: {
         fontSize: 34,
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
         marginHorizontal: 16,
         marginTop: 24,
         borderRadius: 12,
-        padding: 20,
+        padding: 16,
     },
     competitionContent: {
         flexDirection: 'row',
@@ -302,17 +302,17 @@ const styles = StyleSheet.create({
     },
     competitionLeft: {
         flex: 1,
+        marginLeft: 12,
     },
     competitionTitle: {
         fontSize: 20,
-        fontWeight: '600',
+        fontWeight: '500',
         marginBottom: 4,
     },
     competitionStatus: {
         fontSize: 14,
     },
     trophyIcon: {
-        marginLeft: 16,
     },
     trophyEmoji: {
         fontSize: 48,
