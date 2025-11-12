@@ -70,7 +70,7 @@ export interface UserProfile {
     avatar?: string;
 }
 
-// BLE Types (Mock)
+// BLE Types
 export interface BLEDevice {
     id: string;
     name: string;
@@ -78,8 +78,18 @@ export interface BLEDevice {
 }
 
 export interface BLEConfig {
-    height: number;
-    weight: number;
-    age: number;
-    gender: number; // 0: Male, 1: Female
+    height: number;  // in meters (e.g., 1.77)
+    weight: number;  // in kg (e.g., 65.0)
+    age: number;     // years
+    gender: number;  // 0: Male, 1: Female
+}
+
+// Health data received from ESP32 device
+export interface BLEHealthData {
+    heartRate: number;      // hr (bpm)
+    spo2: number;          // spo2 (%)
+    steps: number;         // steps count
+    calories: number;      // calories (kcal)
+    alertScore: number | null;  // ML alert score (0-1)
+    timestamp: string;     // ISO timestamp
 }

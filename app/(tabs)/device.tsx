@@ -1,21 +1,22 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { mockWearableDevice, mockWatchFaces } from '../../data/mockData';
-import { BLEService } from '../../services/bleService';
-import { useTheme, useThemeColors } from '../../contexts/ThemeContext';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, Animated, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AddMenuToggle from '../../components/AddMenuToggle';
+import { useDevice } from '../../contexts/DeviceContext';
+import { useTheme, useThemeColors } from '../../contexts/ThemeContext';
+import { mockWatchFaces } from '../../data/mockData';
 
 export default function DeviceScreen() {
     const colors = useThemeColors();
     const router = useRouter();
     const { themeTransition } = useTheme();
-    const [device, setDevice] = useState(mockWearableDevice);
-    const [hasDevice, setHasDevice] = useState(false); // Set to false for no device state
+    const { device, syncDeviceData, disconnectDevice, pendingSyncCount, forceSyncToServer } = useDevice();
     const [syncing, setSyncing] = useState(false);
     const [showAddMenu, setShowAddMenu] = useState(false);
     const fadeAnim = useRef(new Animated.Value(1)).current;
+
+    const hasDevice = !!device;
 
     // Fade animation on theme change
     useEffect(() => {
@@ -43,12 +44,14 @@ export default function DeviceScreen() {
     }, [themeTransition, fadeAnim]);
 
     const handleSync = async () => {
+        if (!device) return;
+
         setSyncing(true);
         try {
-            const data = await BLEService.syncData(device.id);
-            console.log('Synced data:', data);
+            await syncDeviceData();
             Alert.alert('Sync Complete', 'Health data synchronized successfully!');
         } catch (error) {
+            console.error('[Device] Sync error:', error);
             Alert.alert('Sync Failed', 'Could not sync data from device.');
         } finally {
             setSyncing(false);
@@ -142,13 +145,25 @@ export default function DeviceScreen() {
             {/* Header */}
             <View style={[styles.header, { backgroundColor: colors.cardBackground }]}>
                 <Text style={[styles.headerTitle, { color: colors.text }]}>Wearables</Text>
-                <View style={{ flexDirection: 'row', gap: 12 }}>
-                    <TouchableOpacity
-                        style={styles.addButton}
-                        onPress={() => setHasDevice(!hasDevice)}
-                    >
-                        <Ionicons name="settings-outline" size={24} color={colors.textSecondary} />
-                    </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+                    {/* Pending Sync Badge */}
+                    {pendingSyncCount > 0 && (
+                        <TouchableOpacity
+                            style={[styles.syncBadge, { backgroundColor: colors.success + '20', borderColor: colors.success }]}
+                            onPress={async () => {
+                                const success = await forceSyncToServer();
+                                Alert.alert(
+                                    success ? '✅ Sync Success' : '❌ Sync Failed',
+                                    success
+                                        ? `Successfully synced ${pendingSyncCount} health records to server`
+                                        : 'Failed to sync data. Please try again.'
+                                );
+                            }}
+                        >
+                            <Ionicons name="cloud-upload" size={16} color={colors.success} />
+                            <Text style={[styles.syncBadgeText, { color: colors.success }]}>{pendingSyncCount}</Text>
+                        </TouchableOpacity>
+                    )}
                     <TouchableOpacity style={styles.addButton} onPress={() => setShowAddMenu(true)}>
                         <Ionicons name="add-circle-outline" size={28} color={colors.info} />
                     </TouchableOpacity>
@@ -168,13 +183,13 @@ export default function DeviceScreen() {
                     {/* Device Info */}
                     <View style={styles.deviceInfo}>
                         <View style={styles.deviceHeader}>
-                            <Text style={[styles.deviceName, { color: colors.text }]}>{device.name}</Text>
+                            <Text style={[styles.deviceName, { color: colors.text }]}>{device?.name || 'Unknown Device'}</Text>
                             <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
                         </View>
                         <View style={styles.deviceStatus}>
                             <View style={[styles.statusDot, { backgroundColor: colors.success }]} />
                             <Text style={[styles.statusText, { color: colors.success }]}>Connected</Text>
-                            <Text style={[styles.batteryText, { color: colors.textSecondary }]}> | Battery: {device.battery}%</Text>
+                            <Text style={[styles.batteryText, { color: colors.textSecondary }]}> | Battery: {device?.battery || 0}%</Text>
                         </View>
                     </View>
                 </TouchableOpacity>
@@ -329,6 +344,19 @@ const styles = StyleSheet.create({
     },
     addButton: {
         padding: 4,
+    },
+    syncBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 16,
+        borderWidth: 1,
+        gap: 6,
+    },
+    syncBadgeText: {
+        fontSize: 12,
+        fontWeight: '600',
     },
     noDeviceContainer: {
         flex: 1,

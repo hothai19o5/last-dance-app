@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
+import { DeviceProvider } from '@/contexts/DeviceContext';
 import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 
 export const unstable_settings = {
@@ -26,7 +27,9 @@ function RootLayoutNav() {
 export default function RootLayout() {
   return (
     <ThemeProvider>
-      <RootLayoutNav />
+      <DeviceProvider>
+        <RootLayoutNav />
+      </DeviceProvider>
     </ThemeProvider>
   );
 }

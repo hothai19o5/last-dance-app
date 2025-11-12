@@ -1,12 +1,13 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Animated, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import ActivityRings from '../../components/ActivityRings';
-import { mockHealthMetrics, mockSleepData, mockHeartRateData, mockSpO2Data, mockWeightData } from '../../data/mockData';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, Animated, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { BarChart, LineChart } from 'react-native-gifted-charts';
-import { useTheme, useThemeColors } from '../../contexts/ThemeContext';
+import ActivityRings from '../../components/ActivityRings';
 import AddMenuToggle from '../../components/AddMenuToggle';
+import { useDevice } from '../../contexts/DeviceContext';
+import { useTheme, useThemeColors } from '../../contexts/ThemeContext';
+import { mockHealthMetrics, mockSleepData, mockWeightData } from '../../data/mockData';
 
 const { width } = Dimensions.get('window');
 
@@ -14,8 +15,27 @@ export default function HealthScreen() {
     const { calories, steps, standing, moving } = mockHealthMetrics;
     const colors = useThemeColors();
     const { themeTransition } = useTheme();
+    const { healthData, device, pendingSyncCount, forceSyncToServer } = useDevice();
     const fadeAnim = useRef(new Animated.Value(1)).current;
     const [showAddMenu, setShowAddMenu] = useState(false);
+    const [showAlert, setShowAlert] = useState(false);
+
+    // Sử dụng dữ liệu từ device nếu có, nếu không dùng mock data
+    const heartRate = healthData?.heartRate || 0;
+    const spo2 = healthData?.spo2 || 0;
+    const currentSteps = healthData?.steps || steps.current;
+    const currentCalories = healthData?.calories || calories.current;
+    const alertScore = healthData?.alertScore;
+
+    // Show alert when alertScore is present and >= 0.5
+    useEffect(() => {
+        if (alertScore !== null && alertScore !== undefined && alertScore >= 0.5) {
+            setShowAlert(true);
+            // Auto hide after 10 seconds
+            const timer = setTimeout(() => setShowAlert(false), 10000);
+            return () => clearTimeout(timer);
+        }
+    }, [alertScore]);
 
     // Fade animation on theme change
     useEffect(() => {
@@ -43,13 +63,13 @@ export default function HealthScreen() {
     }, [themeTransition, fadeAnim]);
 
     // Calculate overall completion percentage
-    const caloriesPercent = (calories.current / calories.goal) * 100;
-    const stepsPercent = (steps.current / steps.goal) * 100;
+    const caloriesPercent = (currentCalories / calories.goal) * 100;
+    const stepsPercent = (currentSteps / steps.goal) * 100;
     const standingPercent = (standing.current / standing.goal) * 100;
     const overallPercent = (caloriesPercent + stepsPercent + standingPercent) / 3;
 
     // Calculate cookies earned (1 cookie per 50 calories)
-    const cookiesEarned = Math.floor(calories.current / 50);
+    const cookiesEarned = Math.floor(currentCalories / 50);
 
     // Prepare ActivityRings data
     const activityData = [
@@ -76,20 +96,23 @@ export default function HealthScreen() {
         radius: 80,
         ringSize: 16,
     };
-    const heartRateChartData = mockHeartRateData.history.slice(-12).map((bpm, index) => ({
+
+    // Create mock history for charts (will be replaced with real data later)
+    const mockHeartRateHistory = Array(12).fill(heartRate || 64);
+    const mockSpO2History = Array(12).fill(spo2 || 98);
+
+    const heartRateChartData = mockHeartRateHistory.map((bpm: number) => ({
         value: bpm,
     }));
 
-    // Prepare SpO2 chart data (fall back to empty array if not available)
-    const spO2ChartData = mockSpO2Data && mockSpO2Data.history
-        ? mockSpO2Data.history.slice(-12).map((val, index) => ({
-            value: val,
-        }))
-        : [];
+    // Prepare SpO2 chart data
+    const spO2ChartData = mockSpO2History.map((val: number) => ({
+        value: val,
+    }));
 
     // Prepare weight chart data (use available history or empty)
     const weightChartData = mockWeightData && mockWeightData.history
-        ? mockWeightData.history.map((w, index) => ({
+        ? mockWeightData.history.map((w: number, index: number) => ({
             value: w,
             label: index % 2 === 0 ? `${index}` : '',
         }))
@@ -134,10 +157,44 @@ export default function HealthScreen() {
                 {/* Header */}
                 <View style={styles.header}>
                     <Text style={[styles.headerTitle, { color: colors.text }]}>Health</Text>
-                    <TouchableOpacity style={styles.addButton} onPress={() => setShowAddMenu(true)}>
-                        <Ionicons name="add-circle-outline" size={28} color={colors.info} />
-                    </TouchableOpacity>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                        {/* Pending Sync Badge */}
+                        {pendingSyncCount > 0 && (
+                            <TouchableOpacity
+                                style={[styles.syncBadge, { backgroundColor: colors.info + '20', borderColor: colors.info }]}
+                                onPress={async () => {
+                                    const success = await forceSyncToServer();
+                                    Alert.alert(
+                                        success ? 'Sync Success' : 'Sync Failed',
+                                        success ? `${pendingSyncCount} records synced to server` : 'Failed to sync data to server'
+                                    );
+                                }}
+                            >
+                                <Ionicons name="cloud-upload-outline" size={16} color={colors.info} />
+                                <Text style={[styles.syncBadgeText, { color: colors.info }]}>{pendingSyncCount}</Text>
+                            </TouchableOpacity>
+                        )}
+                        <TouchableOpacity style={styles.addButton} onPress={() => setShowAddMenu(true)}>
+                            <Ionicons name="add-circle-outline" size={28} color={colors.info} />
+                        </TouchableOpacity>
+                    </View>
                 </View>
+
+                {/* Alert Banner */}
+                {showAlert && alertScore !== null && alertScore !== undefined && (
+                    <View style={[styles.alertBanner, { backgroundColor: colors.danger + '15', borderColor: colors.danger }]}>
+                        <Ionicons name="warning" size={24} color={colors.danger} />
+                        <View style={{ flex: 1, marginLeft: 12 }}>
+                            <Text style={[styles.alertTitle, { color: colors.danger }]}>⚠️ Abnormal Vitals Detected</Text>
+                            <Text style={[styles.alertText, { color: colors.text }]}>
+                                Alert Score: {(alertScore * 100).toFixed(0)}% • HR: {heartRate} bpm • SpO₂: {spo2}%
+                            </Text>
+                        </View>
+                        <TouchableOpacity onPress={() => setShowAlert(false)}>
+                            <Ionicons name="close-circle" size={24} color={colors.danger} />
+                        </TouchableOpacity>
+                    </View>
+                )}
 
                 {/* Summary Circle */}
                 <View style={styles.summaryContainer}>
@@ -165,21 +222,22 @@ export default function HealthScreen() {
                         icon="flame"
                         iconColor={colors.caloriesColor}
                         label="Calories"
-                        value={calories.current}
+                        value={currentCalories}
                         unit="kcal"
                         goal={calories.goal}
                         colors={colors}
                     />
                     <MetricCard
-                        icon="footsteps"
+                        icon="walk"
                         iconColor={colors.stepsColor}
                         label="Steps"
-                        value={steps.current}
+                        value={currentSteps}
                         unit="steps"
                         goal={steps.goal}
+                        colors={colors}
                     />
                     <MetricCard
-                        icon="time"
+                        icon="trophy"
                         iconColor={colors.standingColor}
                         label="Standing"
                         value={standing.current}
@@ -187,9 +245,16 @@ export default function HealthScreen() {
                         goal={standing.goal}
                         colors={colors}
                     />
-                </View>
-
-                {/* Moving Time */}
+                    <MetricCard
+                        icon="body"
+                        iconColor={colors.movingColor}
+                        label="Moving"
+                        value={moving.minutes}
+                        unit="min"
+                        goal={null}
+                        colors={colors}
+                    />
+                </View>                {/* Moving Time */}
                 <TouchableOpacity style={[styles.movingCard, { backgroundColor: colors.cardBackground }]}>
                     <View style={styles.movingContent}>
                         <View style={[styles.circleIcon, { backgroundColor: colors.info }]}>
@@ -209,8 +274,10 @@ export default function HealthScreen() {
                             </View>
                             <Text style={[styles.cardTitle, { color: colors.text }]}>Heart rate</Text>
                         </View>
-                        <Text style={[styles.cardValue, { color: colors.text }]}>{mockHeartRateData.bpm} BPM</Text>
-                        <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>{mockHeartRateData.timestamp}</Text>
+                        <Text style={[styles.cardValue, { color: colors.text }]}>{heartRate} BPM</Text>
+                        <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>
+                            {healthData?.timestamp ? new Date(healthData.timestamp).toLocaleString() : 'No data'}
+                        </Text>
 
                         {/* Heart Rate Chart */}
                         <View style={styles.chartContainer}>
@@ -239,8 +306,10 @@ export default function HealthScreen() {
                             </View>
                             <Text style={[styles.cardTitle, { color: colors.text }]}>SpO2</Text>
                         </View>
-                        <Text style={[styles.cardValue, { color: colors.text }]}>{mockSpO2Data.percentage} %</Text>
-                        <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>{mockSpO2Data.timestamp}</Text>
+                        <Text style={[styles.cardValue, { color: colors.text }]}>{spo2} %</Text>
+                        <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>
+                            {healthData?.timestamp ? new Date(healthData.timestamp).toLocaleString() : 'No data'}
+                        </Text>
 
                         {/* SpO2 Chart */}
                         <View style={styles.chartContainer}>
@@ -355,7 +424,7 @@ interface MetricCardProps {
     label: string;
     value: number;
     unit: string;
-    goal: number;
+    goal: number | null;
     colors?: any;
 }
 
@@ -368,7 +437,9 @@ const MetricCard: React.FC<MetricCardProps> = ({ icon, iconColor, label, value, 
             </View>
             <Text style={[styles.metricLabel, { color: themeColors.text }]}>{label}</Text>
             <Text style={[styles.metricValue, { color: themeColors.text }]}>{value}</Text>
-            <Text style={[styles.metricGoal, { color: themeColors.textSecondary }]}>/{goal}{unit}</Text>
+            <Text style={[styles.metricGoal, { color: themeColors.textSecondary }]}>
+                {goal !== null ? `/${goal}${unit}` : unit}
+            </Text>
         </TouchableOpacity>
     );
 };
@@ -391,6 +462,37 @@ const styles = StyleSheet.create({
     },
     addButton: {
         padding: 4,
+    },
+    syncBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 16,
+        borderWidth: 1,
+        gap: 6,
+    },
+    syncBadgeText: {
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    alertBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginHorizontal: 20,
+        marginTop: 16,
+        padding: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+    },
+    alertTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        marginBottom: 4,
+    },
+    alertText: {
+        fontSize: 13,
+        opacity: 0.8,
     },
     summaryContainer: {
         paddingVertical: 0,

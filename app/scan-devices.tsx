@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useDevice } from '../contexts/DeviceContext';
 import { useThemeColors } from '../contexts/ThemeContext';
 import { BLEService } from '../services/bleService';
+import { WearableDevice } from '../types';
 
 interface ScannedDevice {
     id: string;
@@ -15,6 +16,7 @@ interface ScannedDevice {
 export default function ScanDevicesScreen() {
     const colors = useThemeColors();
     const router = useRouter();
+    const { setDevice } = useDevice();
     const [scanning, setScanning] = useState(false);
     const [devices, setDevices] = useState<ScannedDevice[]>([]);
 
@@ -71,12 +73,37 @@ export default function ScanDevicesScreen() {
                             // Real BLE connection
                             const connected = await BLEService.connectToDevice(device.id);
                             if (connected) {
-                                Alert.alert('Success', `Connected to ${device.name}`);
-                                router.back();
+                                // Tạo đối tượng thiết bị
+                                const wearableDevice: WearableDevice = {
+                                    id: device.id,
+                                    name: device.name,
+                                    type: 'smartwatch',
+                                    connected: true,
+                                    battery: 100, // Sẽ cập nhật sau
+                                };
+
+                                // Đọc battery level
+                                try {
+                                    const battery = await BLEService.getBatteryLevel(device.id);
+                                    wearableDevice.battery = battery;
+                                } catch (error) {
+                                    console.log('[BLE] Could not read battery level');
+                                }
+
+                                // Lưu vào context
+                                await setDevice(wearableDevice);
+
+                                Alert.alert('Success', `Connected to ${device.name}`, [
+                                    {
+                                        text: 'OK',
+                                        onPress: () => router.back(),
+                                    }
+                                ]);
                             } else {
                                 Alert.alert('Error', 'Failed to connect to device');
                             }
                         } catch (error) {
+                            console.error('[BLE] Connection error:', error);
                             Alert.alert('Error', 'Failed to connect to device');
                         }
                     },

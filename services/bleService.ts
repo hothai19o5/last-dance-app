@@ -1,9 +1,22 @@
 // BLE Service - Real Implementation using react-native-ble-plx
-import { BleManager, Device, State } from 'react-native-ble-plx';
-import { BLEDevice, BLEConfig } from '../types';
+import { Buffer } from 'buffer';
 import { PermissionsAndroid, Platform } from 'react-native';
+import { BleManager, State } from 'react-native-ble-plx';
+import { BLEConfig, BLEDevice } from '../types';
+import { encodeUserProfile, parseHealthDataJSON } from '../utils/bleDebug';
 
 const bleManager = new BleManager();
+
+// BLE Service UUIDs (matching ESP32 device)
+const USER_PROFILE_SERVICE_UUID = '0000181C-0000-1000-8000-00805F9B34FB';
+const WEIGHT_CHAR_UUID = '00002A98-0000-1000-8000-00805F9B34FB';
+const HEIGHT_CHAR_UUID = '00002A8E-0000-1000-8000-00805F9B34FB';
+const GENDER_CHAR_UUID = '00002A8C-0000-1000-8000-00805F9B34FB';
+const AGE_CHAR_UUID = '00002A80-0000-1000-8000-00805F9B34FB';
+
+const HEALTH_DATA_SERVICE_UUID = '0000180D-0000-1000-8000-00805F9B34FB';
+const HEALTH_DATA_BATCH_CHAR_UUID = '00002A37-0000-1000-8000-00805F9B34FB';
+const DEVICE_STATUS_CHAR_UUID = '00002A19-0000-1000-8000-00805F9B34FB';
 
 export class BLEService {
   // Request BLE permissions (Android)
@@ -127,20 +140,47 @@ export class BLEService {
   static async writeConfig(deviceId: string, config: BLEConfig): Promise<boolean> {
     console.log('[BLE] Writing config to device:', deviceId, config);
 
-    // TODO: Replace with your device's actual service and characteristic UUIDs
-    const SERVICE_UUID = 'your-service-uuid';
-    const CONFIG_CHAR_UUID = 'your-config-characteristic-uuid';
-
     try {
-      const configData = JSON.stringify(config);
-      const base64Data = Buffer.from(configData).toString('base64');
+      // Encode user profile data using helper function
+      const encoded = encodeUserProfile(
+        config.height,
+        config.weight,
+        config.age,
+        config.gender
+      );
 
+      // Write Weight
       await bleManager.writeCharacteristicWithResponseForDevice(
         deviceId,
-        SERVICE_UUID,
-        CONFIG_CHAR_UUID,
-        base64Data
+        USER_PROFILE_SERVICE_UUID,
+        WEIGHT_CHAR_UUID,
+        encoded.weight
       );
+
+      // Write Height
+      await bleManager.writeCharacteristicWithResponseForDevice(
+        deviceId,
+        USER_PROFILE_SERVICE_UUID,
+        HEIGHT_CHAR_UUID,
+        encoded.height
+      );
+
+      // Write Gender
+      await bleManager.writeCharacteristicWithResponseForDevice(
+        deviceId,
+        USER_PROFILE_SERVICE_UUID,
+        GENDER_CHAR_UUID,
+        encoded.gender
+      );
+
+      // Write Age
+      await bleManager.writeCharacteristicWithResponseForDevice(
+        deviceId,
+        USER_PROFILE_SERVICE_UUID,
+        AGE_CHAR_UUID,
+        encoded.age
+      );
+
       console.log('[BLE] Config written successfully');
       return true;
     } catch (error) {
@@ -152,32 +192,36 @@ export class BLEService {
   static async syncData(deviceId: string): Promise<any> {
     console.log('[BLE] Syncing data from device:', deviceId);
 
-    // TODO: Replace with your device's actual service and characteristic UUIDs
-    const SERVICE_UUID = 'your-service-uuid';
-    const DATA_CHAR_UUID = 'your-data-characteristic-uuid';
-
     try {
+      // Read Health Data Batch (JSON format from ESP32)
       const characteristic = await bleManager.readCharacteristicForDevice(
         deviceId,
-        SERVICE_UUID,
-        DATA_CHAR_UUID
+        HEALTH_DATA_SERVICE_UUID,
+        HEALTH_DATA_BATCH_CHAR_UUID
       );
 
       if (characteristic.value) {
-        const data = Buffer.from(characteristic.value, 'base64').toString('utf-8');
-        const parsedData = JSON.parse(data);
-        console.log('[BLE] Synced data:', parsedData);
-        return parsedData;
+        // Use helper function to parse health data
+        const parsedData = parseHealthDataJSON(characteristic.value);
+
+        if (parsedData) {
+          console.log('[BLE] Synced data:', parsedData);
+          return {
+            ...parsedData,
+            timestamp: new Date().toISOString(),
+          };
+        }
       }
       return null;
     } catch (error) {
       console.error('[BLE] Sync data error:', error);
       // Return mock data if sync fails (for testing)
       return {
+        heartRate: 64,
+        spo2: 98,
         steps: 319,
         calories: 6,
-        heartRate: 64,
-        sleepDuration: 471,
+        alertScore: null,
         timestamp: new Date().toISOString(),
       };
     }
@@ -186,15 +230,11 @@ export class BLEService {
   static async getBatteryLevel(deviceId: string): Promise<number> {
     console.log('[BLE] Getting battery level:', deviceId);
 
-    // Standard Bluetooth Battery Service UUIDs
-    const BATTERY_SERVICE_UUID = '0000180F-0000-1000-8000-00805f9b34fb';
-    const BATTERY_CHAR_UUID = '00002A19-0000-1000-8000-00805f9b34fb';
-
     try {
       const characteristic = await bleManager.readCharacteristicForDevice(
         deviceId,
-        BATTERY_SERVICE_UUID,
-        BATTERY_CHAR_UUID
+        HEALTH_DATA_SERVICE_UUID,
+        DEVICE_STATUS_CHAR_UUID
       );
 
       if (characteristic.value) {
@@ -207,6 +247,87 @@ export class BLEService {
     } catch (error) {
       console.error('[BLE] Battery read error:', error);
       return -1;
+    }
+  }
+
+  // Subscribe to health data notifications
+  static async subscribeToHealthData(
+    deviceId: string,
+    onDataReceived: (data: any) => void
+  ): Promise<() => void> {
+    console.log('[BLE] Subscribing to health data notifications...');
+
+    // Buffer for incomplete JSON chunks
+    let jsonBuffer = '';
+
+    try {
+      // Ensure device is connected and services are discovered
+      const device = await bleManager.connectToDevice(deviceId);
+      await device.discoverAllServicesAndCharacteristics();
+
+      // Request larger MTU for better data transfer (max 512)
+      try {
+        const mtu = await device.requestMTU(512);
+        console.log(`[BLE] MTU set to: ${mtu} bytes`);
+      } catch (error) {
+        console.log('[BLE] Could not set MTU, using default (23 bytes)');
+      }
+
+      // Small delay to ensure characteristics are ready
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const subscription = bleManager.monitorCharacteristicForDevice(
+        deviceId,
+        HEALTH_DATA_SERVICE_UUID,
+        HEALTH_DATA_BATCH_CHAR_UUID,
+        (error, characteristic) => {
+          if (error) {
+            console.error('[BLE] Monitor error:', error);
+            return;
+          }
+
+          if (characteristic?.value) {
+            // Decode chunk
+            const chunk = Buffer.from(characteristic.value, 'base64').toString('utf-8');
+
+            // Add to buffer
+            jsonBuffer += chunk;
+
+            // Check if we have complete JSON (ends with })
+            if (jsonBuffer.trim().endsWith('}')) {
+              // Try to parse complete JSON
+              const healthData = parseHealthDataJSON(Buffer.from(jsonBuffer, 'utf-8').toString('base64'));
+
+              if (healthData) {
+                const dataWithTimestamp = {
+                  ...healthData,
+                  timestamp: new Date().toISOString(),
+                };
+
+                console.log('[BLE] Received health data:', dataWithTimestamp);
+                onDataReceived(dataWithTimestamp);
+              }
+
+              // Clear buffer for next message
+              jsonBuffer = '';
+            } else {
+              console.log(`[BLE] Buffering chunk... (${jsonBuffer.length} chars so far)`);
+            }
+          }
+        }
+      );
+
+      console.log('[BLE] Successfully subscribed to health data');
+
+      // Return unsubscribe function
+      return () => {
+        subscription.remove();
+        jsonBuffer = ''; // Clear buffer on unsubscribe
+        console.log('[BLE] Unsubscribed from health data');
+      };
+    } catch (error) {
+      console.error('[BLE] Subscribe error:', error);
+      return () => { };
     }
   }
 }
