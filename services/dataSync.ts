@@ -1,23 +1,14 @@
 // Data Sync Service - Gom dữ liệu và gửi lên server mỗi 30 phút
 import { BLEHealthData } from '@/types';
+import { apiService, HealthDataDto, HealthDataPoint } from './api';
 
-const MOCK_API_URL = 'https://jsonplaceholder.typicode.com/posts'; // Mock API endpoint
 const SYNC_INTERVAL = 30 * 60 * 1000; // 30 minutes in milliseconds
-
-interface HealthDataBatch {
-    deviceId: string;
-    deviceName: string;
-    userId: string;
-    data: BLEHealthData[];
-    syncedAt?: string;
-}
 
 class DataSyncService {
     private dataBuffer: BLEHealthData[] = [];
     private syncTimer: ReturnType<typeof setInterval> | null = null;
     private deviceId: string = '';
     private deviceName: string = '';
-    private userId: string = 'user_001'; // Default user ID
 
     /**
      * Bắt đầu sync service
@@ -75,38 +66,35 @@ class DataSyncService {
             return true;
         }
 
-        const batch: HealthDataBatch = {
-            deviceId: this.deviceId,
-            deviceName: this.deviceName,
-            userId: this.userId,
-            data: [...this.dataBuffer],
-            syncedAt: new Date().toISOString(),
+        // Convert BLEHealthData to HealthDataPoint format
+        const dataPoints: HealthDataPoint[] = this.dataBuffer.map(data => ({
+            timestamp: data.timestamp,
+            heartRate: data.heartRate,
+            spo2: data.spo2,
+            stepCount: data.steps,
+            caloriesBurned: data.calories,
+        }));
+
+        const healthDataDto: HealthDataDto = {
+            deviceUuid: this.deviceId,
+            dataPoints: dataPoints,
         };
 
-        console.log(`[DataSync] Syncing ${batch.data.length} records to server...`);
+        console.log(`[DataSync] Syncing ${dataPoints.length} records to server...`);
 
         try {
-            const response = await fetch(MOCK_API_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(batch),
-            });
+            const result = await apiService.sendHealthData(healthDataDto);
+            console.log('[DataSync] ✅ Sync successful! Server response:', result);
 
-            if (response.ok) {
-                const result = await response.json();
-                console.log('[DataSync] ✅ Sync successful! Server response:', result);
-
-                // Clear buffer after successful sync
-                this.dataBuffer = [];
-                return true;
-            } else {
-                console.error('[DataSync] ❌ Sync failed:', response.status, response.statusText);
-                return false;
-            }
-        } catch (error) {
+            // Clear buffer after successful sync
+            this.dataBuffer = [];
+            return true;
+        } catch (error: any) {
             console.error('[DataSync] ❌ Sync error:', error);
+            // If unauthorized, user needs to login again
+            if (error.status === 401) {
+                console.error('[DataSync] Unauthorized - Please login again');
+            }
             return false;
         }
     }

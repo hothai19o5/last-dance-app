@@ -137,6 +137,17 @@ export class BLEService {
     }
   }
 
+  static async isDeviceConnected(deviceId: string): Promise<boolean> {
+    try {
+      const isConnected = await bleManager.isDeviceConnected(deviceId);
+      console.log('[BLE] Device connection status:', deviceId, isConnected);
+      return isConnected;
+    } catch (error) {
+      console.error('[BLE] Error checking connection status:', error);
+      return false;
+    }
+  }
+
   static async writeConfig(deviceId: string, config: BLEConfig): Promise<boolean> {
     console.log('[BLE] Writing config to device:', deviceId, config);
 

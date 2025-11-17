@@ -11,7 +11,7 @@ export default function DeviceScreen() {
     const colors = useThemeColors();
     const router = useRouter();
     const { themeTransition } = useTheme();
-    const { device, syncDeviceData, disconnectDevice, pendingSyncCount, forceSyncToServer } = useDevice();
+    const { device, syncDeviceData, disconnectDevice, pendingSyncCount, forceSyncToServer, isConnected } = useDevice();
     const [syncing, setSyncing] = useState(false);
     const [showAddMenu, setShowAddMenu] = useState(false);
     const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -100,11 +100,8 @@ export default function DeviceScreen() {
                 <View style={[styles.header]}>
                     <Text style={[styles.headerTitle, { color: colors.text }]}>Wearables</Text>
                     {/* When press button -> toggle add-new-device -> handle similar when press addDeviceButton */}
-                    <TouchableOpacity
-                        style={styles.addButton}
-                        onPress={() => setShowAddMenu(true)}
-                    >
-                        <Ionicons name="add-circle-outline" size={28} color={colors.info} />
+                    <TouchableOpacity style={styles.addButton} onPress={() => setShowAddMenu(true)} >
+                        <Ionicons name="add-circle-outline" size={28} color={colors.tint} />
                     </TouchableOpacity>
                 </View>
 
@@ -165,7 +162,7 @@ export default function DeviceScreen() {
                         </TouchableOpacity>
                     )}
                     <TouchableOpacity style={styles.addButton} onPress={() => setShowAddMenu(true)}>
-                        <Ionicons name="add-circle-outline" size={28} color={colors.info} />
+                        <Ionicons name="add-circle-outline" size={28} color={colors.tint} />
                     </TouchableOpacity>
                 </View>
             </View>
@@ -176,7 +173,11 @@ export default function DeviceScreen() {
                     {/* Device Image */}
                     <View style={styles.deviceImageContainer}>
                         <View style={[styles.watchPlaceholder, { backgroundColor: colors.divider }]}>
-                            <Ionicons name="watch" size={80} color={colors.textSecondary} />
+                            <Image
+                                source={require('../../assets/images/device.png')}
+                                style={styles.deviceImagePlaceHolder}
+                                resizeMode="contain"
+                            />
                         </View>
                     </View>
 
@@ -187,16 +188,22 @@ export default function DeviceScreen() {
                             <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
                         </View>
                         <View style={styles.deviceStatus}>
-                            <View style={[styles.statusDot, { backgroundColor: colors.success }]} />
-                            <Text style={[styles.statusText, { color: colors.success }]}>Connected</Text>
-                            <Text style={[styles.batteryText, { color: colors.textSecondary }]}> | Battery: {device?.battery || 0}%</Text>
+                            <View style={[styles.statusDot, { backgroundColor: isConnected ? colors.success : colors.error }]} />
+                            <Text style={[styles.statusText, { color: isConnected ? colors.success : colors.error }]}>
+                                {isConnected ? 'Connected' : 'Disconnected'}
+                            </Text>
+                            {isConnected && (
+                                <Text style={[styles.batteryText, { color: colors.textSecondary }]}>
+                                    {' | Battery: '}{device?.battery || 0}%
+                                </Text>
+                            )}
                         </View>
                     </View>
                 </TouchableOpacity>
 
                 {/* Sync Button */}
                 <TouchableOpacity
-                    style={[styles.syncButton, { backgroundColor: colors.info }, syncing && styles.syncButtonDisabled]}
+                    style={[styles.syncButton, { backgroundColor: colors.tint }, syncing && styles.syncButtonDisabled]}
                     onPress={handleSync}
                     disabled={syncing}
                 >
@@ -371,6 +378,10 @@ const styles = StyleSheet.create({
     deviceImage: {
         width: 200,
         height: 200,
+    },
+    deviceImagePlaceHolder: {
+        width: 90,
+        height: 90,
     },
     addDeviceButton: {
         flexDirection: 'row',

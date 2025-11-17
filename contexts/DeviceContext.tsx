@@ -28,7 +28,28 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     // Load device on mount
     useEffect(() => {
         loadDevice();
+
+        // Check connection status periodically
+        const checkInterval = setInterval(() => {
+            checkDeviceConnection();
+        }, 5000); // Check every 5 seconds
+
+        return () => clearInterval(checkInterval);
     }, []);
+
+    const checkDeviceConnection = async () => {
+        if (device?.id) {
+            const connected = await BLEService.isDeviceConnected(device.id);
+            if (connected !== isConnected) {
+                console.log('[DeviceContext] Connection status changed:', connected);
+                setIsConnected(connected);
+                await DeviceStorage.updateConnectionStatus(connected);
+
+                // Update device state
+                setDeviceState(prev => prev ? { ...prev, connected } : null);
+            }
+        }
+    };
 
     // Subscribe to health data when device is connected
     useEffect(() => {
@@ -65,8 +86,17 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const loadDevice = async () => {
         const savedDevice = await DeviceStorage.getConnectedDevice();
         if (savedDevice) {
-            setDeviceState(savedDevice);
-            setIsConnected(savedDevice.connected);
+            // Check actual BLE connection status
+            const actuallyConnected = await BLEService.isDeviceConnected(savedDevice.id);
+            const updatedDevice = { ...savedDevice, connected: actuallyConnected };
+
+            setDeviceState(updatedDevice);
+            setIsConnected(actuallyConnected);
+
+            // Update storage with actual connection status
+            if (actuallyConnected !== savedDevice.connected) {
+                await DeviceStorage.updateConnectionStatus(actuallyConnected);
+            }
         }
     };
 

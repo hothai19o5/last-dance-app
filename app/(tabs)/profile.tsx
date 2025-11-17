@@ -1,19 +1,40 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { mockUserProfile } from '../../data/mockData';
-import { useTheme, useThemeColors } from '../../contexts/ThemeContext';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useState } from 'react';
+import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AddMenuToggle from '../../components/AddMenuToggle';
+import { useTheme, useThemeColors } from '../../contexts/ThemeContext';
+import { authService } from '../../services/authService';
+import { userProfileService } from '../../services/userProfileService';
+import { UserProfile } from '../../types';
+import { authToasts } from '../../utils/toast';
 
 export default function ProfileScreen() {
-    const profile = mockUserProfile;
+    const router = useRouter();
     const { themeMode, setThemeMode } = useTheme();
     const colors = useThemeColors();
     const [showThemeModal, setShowThemeModal] = useState(false);
     const [showAddMenu, setShowAddMenu] = useState(false);
+    const [profile, setProfile] = useState<UserProfile | null>(null);
+
+    // Load profile when screen comes into focus
+    useFocusEffect(
+        React.useCallback(() => {
+            loadProfile();
+        }, [])
+    );
+
+    const loadProfile = async () => {
+        try {
+            const userProfile = await userProfileService.getProfile();
+            setProfile(userProfile);
+        } catch (error) {
+            console.error('[Profile] Error loading profile:', error);
+        }
+    };
 
     const handleEditProfile = () => {
-        Alert.alert('Edit Profile', 'Profile editing will be implemented here.');
+        router.push('/edit-profile');
     };
 
     const handleCompetition = () => {
@@ -23,6 +44,37 @@ export default function ProfileScreen() {
     const handleThemeSelect = (mode: 'light' | 'dark' | 'system') => {
         setThemeMode(mode);
         setShowThemeModal(false);
+    };
+
+    const handleLogout = async () => {
+        Alert.alert(
+            'Logout',
+            'Are you sure you want to logout?',
+            [
+                {
+                    text: 'Cancel',
+                    style: 'cancel',
+                },
+                {
+                    text: 'Logout',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await authService.logout();
+                            console.log('[Profile] Logout successful');
+                            authToasts.logoutSuccess();
+                            // Navigate to login screen after a short delay
+                            setTimeout(() => {
+                                router.replace('/login' as any);
+                            }, 500);
+                        } catch (error) {
+                            console.error('[Profile] Logout error:', error);
+                            Alert.alert('Error', 'Failed to logout. Please try again.');
+                        }
+                    },
+                },
+            ]
+        );
     };
 
     // Menu items for add button
@@ -59,19 +111,25 @@ export default function ProfileScreen() {
             <View style={[styles.header]}>
                 <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
                 <TouchableOpacity style={styles.addButton} onPress={() => setShowAddMenu(true)}>
-                    <Ionicons name="add-circle-outline" size={28} color={colors.info} />
+                    <Ionicons name="add-circle-outline" size={28} color={colors.tint} />
                 </TouchableOpacity>
             </View>
 
             {/* User Info Card */}
             <TouchableOpacity style={[styles.userCard]} onPress={handleEditProfile}>
-                <View style={[styles.userAvatar, { backgroundColor: colors.background }]}>
-                    <Ionicons name="person" size={40} color={colors.textSecondary} />
+                <View style={[styles.userAvatar, { backgroundColor: colors.cardBackground }]}>
+                    {profile?.avatar ? (
+                        <Image source={{ uri: profile.avatar }} style={styles.avatarImage} />
+                    ) : (
+                        <Ionicons name="person" size={40} color={colors.textSecondary} />
+                    )}
                 </View>
                 <View style={styles.userInfo}>
-                    <Text style={[styles.userId, { color: colors.text }]}>{profile.name}</Text>
+                    <Text style={[styles.userId, { color: colors.text }]}>
+                        {profile?.name || 'Guest User'}
+                    </Text>
                     <Text style={[styles.userDetails, { color: colors.textSecondary }]}>
-                        {profile.gender}   {profile.height} cm   {profile.age}
+                        {profile ? `${profile.gender}   ${profile.height} cm   ${profile.age}` : 'Tap to set up profile'}
                     </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color={colors.placeholder} />
@@ -145,10 +203,7 @@ export default function ProfileScreen() {
             {/* Logout Button */}
             <TouchableOpacity
                 style={[styles.logoutButton, { backgroundColor: colors.cardBackground }]}
-                onPress={() => Alert.alert('Logout', 'Are you sure you want to logout?', [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Logout', style: 'destructive', onPress: () => console.log('Logout') }
-                ])}
+                onPress={handleLogout}
             >
                 <Ionicons name="log-out-outline" size={20} color={colors.error} />
                 <Text style={[styles.logoutText, { color: colors.error }]}>Logout</Text>
@@ -277,6 +332,11 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 16,
+        overflow: 'hidden',
+    },
+    avatarImage: {
+        width: '100%',
+        height: '100%',
     },
     userInfo: {
         flex: 1,

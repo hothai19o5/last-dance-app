@@ -1,10 +1,9 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Ionicons } from '@expo/vector-icons';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { useThemeColors } from '@/contexts/ThemeContext';
-import { View } from 'react-native-reanimated/lib/typescript/Animated';
 
 export default function TabLayout() {
   const colors = useThemeColors();
@@ -23,7 +22,8 @@ export default function TabLayout() {
           paddingBottom: 25,
           paddingTop: 10,
         },
-      }}>
+      }}
+      initialRouteName="health">
       <Tabs.Screen
         name="health"
         options={{
@@ -43,18 +43,6 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color }) => <Ionicons name="person" size={24} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="index"
-        options={{
-          href: null, // Hide from tabs
-        }}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          href: null, // Hide from tabs
         }}
       />
     </Tabs>

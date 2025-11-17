@@ -1,18 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { BarChart, LineChart } from 'react-native-gifted-charts';
+import { Animated, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { BarChart } from 'react-native-gifted-charts';
 import ActivityRings from '../../components/ActivityRings';
 import AddMenuToggle from '../../components/AddMenuToggle';
 import { useDevice } from '../../contexts/DeviceContext';
 import { useTheme, useThemeColors } from '../../contexts/ThemeContext';
-import { mockHealthMetrics, mockSleepData, mockWeightData } from '../../data/mockData';
+import { deviceToasts, showToast } from '../../utils/toast';
 
 const { width } = Dimensions.get('window');
 
 export default function HealthScreen() {
-    const { calories, steps, standing, moving } = mockHealthMetrics;
     const colors = useThemeColors();
     const { themeTransition } = useTheme();
     const { healthData, device, pendingSyncCount, forceSyncToServer } = useDevice();
@@ -20,11 +19,16 @@ export default function HealthScreen() {
     const [showAddMenu, setShowAddMenu] = useState(false);
     const [showAlert, setShowAlert] = useState(false);
 
-    // Sử dụng dữ liệu từ device nếu có, nếu không dùng mock data
+    // Health goals
+    const caloriesGoal = 200;
+    const stepsGoal = 2000;
+    const standingGoal = 6;
+
+    // Use real data from device, default to 0 if no data
     const heartRate = healthData?.heartRate || 0;
     const spo2 = healthData?.spo2 || 0;
-    const currentSteps = healthData?.steps || steps.current;
-    const currentCalories = healthData?.calories || calories.current;
+    const currentSteps = healthData?.steps || 0;
+    const currentCalories = healthData?.calories || 0;
     const alertScore = healthData?.alertScore;
 
     // Show alert when alertScore is present and >= 0.5
@@ -63,10 +67,9 @@ export default function HealthScreen() {
     }, [themeTransition, fadeAnim]);
 
     // Calculate overall completion percentage
-    const caloriesPercent = (currentCalories / calories.goal) * 100;
-    const stepsPercent = (currentSteps / steps.goal) * 100;
-    const standingPercent = (standing.current / standing.goal) * 100;
-    const overallPercent = (caloriesPercent + stepsPercent + standingPercent) / 3;
+    const caloriesPercent = (currentCalories / caloriesGoal) * 100;
+    const stepsPercent = (currentSteps / stepsGoal) * 100;
+    const standingPercent = 0; // Standing data not available yet
 
     // Calculate cookies earned (1 cookie per 50 calories)
     const cookiesEarned = Math.floor(currentCalories / 50);
@@ -110,39 +113,31 @@ export default function HealthScreen() {
         value: val,
     }));
 
-    // Prepare weight chart data (use available history or empty)
-    const weightChartData = mockWeightData && mockWeightData.history
-        ? mockWeightData.history.map((w: number, index: number) => ({
-            value: w,
-            label: index % 2 === 0 ? `${index}` : '',
-        }))
-        : [];
-
     // Menu items for add button
     const menuItems = [
         {
             icon: 'fitness' as const,
             iconColor: colors.heartRateColor,
             title: 'Add Workout',
-            onPress: () => Alert.alert('Add Workout', 'Add a new workout session'),
+            onPress: () => showToast.info('Feature coming soon'),
         },
         {
             icon: 'water' as const,
             iconColor: colors.info,
             title: 'Log Water Intake',
-            onPress: () => Alert.alert('Water Intake', 'Log your water consumption'),
+            onPress: () => showToast.info('Feature coming soon'),
         },
         {
             icon: 'restaurant' as const,
             iconColor: colors.warning,
             title: 'Add Meal',
-            onPress: () => Alert.alert('Add Meal', 'Log your meal and calories'),
+            onPress: () => showToast.info('Feature coming soon'),
         },
         {
             icon: 'analytics' as const,
             iconColor: colors.success,
             title: 'Manual Entry',
-            onPress: () => Alert.alert('Manual Entry', 'Manually enter health data'),
+            onPress: () => showToast.info('Feature coming soon'),
         },
     ];
 
@@ -164,10 +159,11 @@ export default function HealthScreen() {
                                 style={[styles.syncBadge, { backgroundColor: colors.info + '20', borderColor: colors.info }]}
                                 onPress={async () => {
                                     const success = await forceSyncToServer();
-                                    Alert.alert(
-                                        success ? 'Sync Success' : 'Sync Failed',
-                                        success ? `${pendingSyncCount} records synced to server` : 'Failed to sync data to server'
-                                    );
+                                    if (success) {
+                                        deviceToasts.syncSuccess();
+                                    } else {
+                                        deviceToasts.syncError();
+                                    }
                                 }}
                             >
                                 <Ionicons name="cloud-upload-outline" size={16} color={colors.info} />
@@ -175,7 +171,7 @@ export default function HealthScreen() {
                             </TouchableOpacity>
                         )}
                         <TouchableOpacity style={styles.addButton} onPress={() => setShowAddMenu(true)}>
-                            <Ionicons name="add-circle-outline" size={28} color={colors.info} />
+                            <Ionicons name="add-circle-outline" size={28} color={colors.tint} />
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -224,7 +220,7 @@ export default function HealthScreen() {
                         label="Calories"
                         value={currentCalories}
                         unit="kcal"
-                        goal={calories.goal}
+                        goal={caloriesGoal}
                         colors={colors}
                     />
                     <MetricCard
@@ -233,34 +229,27 @@ export default function HealthScreen() {
                         label="Steps"
                         value={currentSteps}
                         unit="steps"
-                        goal={steps.goal}
+                        goal={stepsGoal}
                         colors={colors}
                     />
                     <MetricCard
                         icon="trophy"
                         iconColor={colors.standingColor}
                         label="Standing"
-                        value={standing.current}
+                        value={0}
                         unit="hrs"
-                        goal={standing.goal}
+                        goal={standingGoal}
                         colors={colors}
                     />
-                    <MetricCard
-                        icon="body"
-                        iconColor={colors.movingColor}
-                        label="Moving"
-                        value={moving.minutes}
-                        unit="min"
-                        goal={null}
-                        colors={colors}
-                    />
-                </View>                {/* Moving Time */}
+                </View>
+
+                {/* Moving Time */}
                 <TouchableOpacity style={[styles.movingCard, { backgroundColor: colors.cardBackground }]}>
                     <View style={styles.movingContent}>
                         <View style={[styles.circleIcon, { backgroundColor: colors.info }]}>
                             <Ionicons name="person" size={12} color={colors.iconOnColor} />
                         </View>
-                        <Text style={[styles.movingText, { color: colors.text }]}>Moving {moving.minutes} mins</Text>
+                        <Text style={[styles.movingText, { color: colors.text }]}>Moving 0 mins</Text>
                     </View>
                 </TouchableOpacity>
 
@@ -330,7 +319,7 @@ export default function HealthScreen() {
                         </View>
                     </TouchableOpacity>
 
-                    {/* Weight Card */}
+                    {/* Weight Card - No data available */}
                     <TouchableOpacity style={[styles.detailCard, { backgroundColor: colors.cardBackground }]}>
                         <View style={styles.cardHeader}>
                             <View style={[styles.circleIcon, { backgroundColor: colors.weightIconBg }]}>
@@ -338,32 +327,11 @@ export default function HealthScreen() {
                             </View>
                             <Text style={[styles.cardTitle, { color: colors.text }]}>Weight</Text>
                         </View>
-                        <Text style={[styles.cardValue, { color: colors.text }]}>{mockWeightData.weight} kg</Text>
-                        <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>{mockWeightData.date}</Text>
-
-                        {/* Weight Chart */}
-                        <View style={styles.chartContainer}>
-                            <LineChart
-                                data={weightChartData}
-                                spacing={16}
-                                yAxisThickness={0}
-                                xAxisThickness={0}
-                                hideRules
-                                hideYAxisText
-                                height={60}
-                                width={(width - 44) / 2 - 32}
-                                noOfSections={3}
-                                color={colors.weightColor}
-                                dataPointsColor={colors.weightColor}
-                                startFillColor={colors.weightColor}
-                                endFillColor={colors.weightColor}
-                                startOpacity={0.4}
-                                endOpacity={0.1}
-                            />
-                        </View>
+                        <Text style={[styles.cardValue, { color: colors.text }]}>-- kg</Text>
+                        <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>No data</Text>
                     </TouchableOpacity>
 
-                    {/* Sleep Card */}
+                    {/* Sleep Card - No data available */}
                     <TouchableOpacity style={[styles.detailCard, { backgroundColor: colors.cardBackground }]}>
                         <View style={styles.cardHeader}>
                             <View style={[styles.circleIcon, { backgroundColor: colors.sleepIconBg }]}>
@@ -371,32 +339,10 @@ export default function HealthScreen() {
                             </View>
                             <Text style={[styles.cardTitle, { color: colors.text }]}>Sleep</Text>
                         </View>
-                        <Text style={[styles.cardValue, { color: colors.text }]}>{mockSleepData.duration}</Text>
+                        <Text style={[styles.cardValue, { color: colors.text }]}>--</Text>
                         <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>
-                            {mockSleepData.date} {mockSleepData.quality}
+                            No data
                         </Text>
-
-                        {/* Quality Bar */}
-                        <View style={styles.qualityBarContainer}>
-                            <View style={[styles.qualityBar, { backgroundColor: colors.border }]}>
-                                <View
-                                    style={[
-                                        styles.qualityBarFill,
-                                        { width: `${mockSleepData.qualityScore}%`, backgroundColor: colors.sleepColor }
-                                    ]}
-                                />
-                                <View
-                                    style={[
-                                        styles.qualityIndicator,
-                                        { left: `${mockSleepData.qualityScore}%`, backgroundColor: colors.sleepColor }
-                                    ]}
-                                />
-                            </View>
-                            <View style={styles.qualityLabels}>
-                                <Text style={[styles.qualityLabel, { color: colors.textSecondary }]}>Poor</Text>
-                                <Text style={[styles.qualityLabel, { color: colors.textSecondary }]}>Excellent</Text>
-                            </View>
-                        </View>
                     </TouchableOpacity>
 
                 </View>
