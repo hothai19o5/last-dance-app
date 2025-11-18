@@ -2,7 +2,7 @@
   "expo": {
     "name": "Last Dance",
     "slug": "last-dance",
-    "version": "1.0.1",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "lastdance",
@@ -78,6 +78,6 @@
         "projectId": "44b79e0f-be7a-43e7-8514-1d981a7ec376"
       }
     },
-    "owner": "hoxuanthai"
+    "owner": "hothai"
   }
 }
