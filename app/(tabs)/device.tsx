@@ -5,18 +5,30 @@ import { Alert, Animated, Image, ScrollView, StyleSheet, Text, TouchableOpacity,
 import AddMenuToggle from '../../components/AddMenuToggle';
 import { useDevice } from '../../contexts/DeviceContext';
 import { useTheme, useThemeColors } from '../../contexts/ThemeContext';
-import { mockWatchFaces } from '../../data/mockData';
+import { WearableDevice } from '../../types';
+import { deviceToasts, showToast } from '../../utils/toast';
 
 export default function DeviceScreen() {
     const colors = useThemeColors();
     const router = useRouter();
     const { themeTransition } = useTheme();
-    const { device, syncDeviceData, disconnectDevice, pendingSyncCount, forceSyncToServer, isConnected } = useDevice();
+    const { device, syncDeviceData, disconnectDevice, pendingSyncCount, forceSyncToServer, isConnected, reconnectToDevice, getDeviceHistory } = useDevice();
     const [syncing, setSyncing] = useState(false);
     const [showAddMenu, setShowAddMenu] = useState(false);
+    const [deviceHistory, setDeviceHistory] = useState<WearableDevice[]>([]);
     const fadeAnim = useRef(new Animated.Value(1)).current;
 
     const hasDevice = !!device;
+
+    // Load device history on mount
+    useEffect(() => {
+        loadDeviceHistory();
+    }, []);
+
+    const loadDeviceHistory = async () => {
+        const history = await getDeviceHistory();
+        setDeviceHistory(history);
+    };
 
     // Fade animation on theme change
     useEffect(() => {
@@ -49,10 +61,10 @@ export default function DeviceScreen() {
         setSyncing(true);
         try {
             await syncDeviceData();
-            Alert.alert('Sync Complete', 'Health data synchronized successfully!');
+            deviceToasts.syncSuccess();
         } catch (error) {
             console.error('[Device] Sync error:', error);
-            Alert.alert('Sync Failed', 'Could not sync data from device.');
+            deviceToasts.syncError();
         } finally {
             setSyncing(false);
         }
@@ -63,8 +75,29 @@ export default function DeviceScreen() {
         router.push('/scan-devices');
     };
 
-    const handleWatchFaceSelect = (watchFace: any) => {
-        Alert.alert('Watch Face', `Selected: ${watchFace.name}`);
+    const handleWatchFaceSelect = (device: WearableDevice) => {
+        Alert.alert(
+            'Connect to Device',
+            `Do you want to connect to ${device.name}?`,
+            [
+                {
+                    text: 'Cancel',
+                    style: 'cancel',
+                },
+                {
+                    text: 'Connect',
+                    onPress: async () => {
+                        const success = await reconnectToDevice(device.id);
+                        if (success) {
+                            deviceToasts.connected(device.name);
+                            await loadDeviceHistory();
+                        } else {
+                            deviceToasts.connectionFailed(device.name);
+                        }
+                    },
+                },
+            ]
+        );
     };
 
     // Menu items for add button
@@ -149,12 +182,11 @@ export default function DeviceScreen() {
                             style={[styles.syncBadge, { backgroundColor: colors.success + '20', borderColor: colors.success }]}
                             onPress={async () => {
                                 const success = await forceSyncToServer();
-                                Alert.alert(
-                                    success ? '✅ Sync Success' : '❌ Sync Failed',
-                                    success
-                                        ? `Successfully synced ${pendingSyncCount} health records to server`
-                                        : 'Failed to sync data. Please try again.'
-                                );
+                                if (success) {
+                                    deviceToasts.syncSuccess();
+                                } else {
+                                    deviceToasts.syncError();
+                                }
                             }}
                         >
                             <Ionicons name="cloud-upload" size={16} color={colors.success} />
@@ -168,11 +200,11 @@ export default function DeviceScreen() {
             </View>
 
             {/* Connected Device */}
-            <View style={[styles.deviceContainer, { backgroundColor: colors.cardBackground }]}>
-                <TouchableOpacity style={styles.deviceCard}>
-                    {/* Device Image */}
-                    <View style={styles.deviceImageContainer}>
-                        <View style={[styles.watchPlaceholder, { backgroundColor: colors.divider }]}>
+            <View style={[styles.deviceContainer, { backgroundColor: colors.background }]}>
+                <View style={styles.deviceCard}>
+                    {/* Column 1: Device Image */}
+                    <View>
+                        <View style={[styles.watchPlaceholder, { backgroundColor: colors.backgroundSecondary }]}>
                             <Image
                                 source={require('../../assets/images/device.png')}
                                 style={styles.deviceImagePlaceHolder}
@@ -181,71 +213,103 @@ export default function DeviceScreen() {
                         </View>
                     </View>
 
-                    {/* Device Info */}
-                    <View style={styles.deviceInfo}>
-                        <View style={styles.deviceHeader}>
-                            <Text style={[styles.deviceName, { color: colors.text }]}>{device?.name || 'Unknown Device'}</Text>
-                            <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
-                        </View>
-                        <View style={styles.deviceStatus}>
-                            <View style={[styles.statusDot, { backgroundColor: isConnected ? colors.success : colors.error }]} />
-                            <Text style={[styles.statusText, { color: isConnected ? colors.success : colors.error }]}>
-                                {isConnected ? 'Connected' : 'Disconnected'}
-                            </Text>
-                            {isConnected && (
-                                <Text style={[styles.batteryText, { color: colors.textSecondary }]}>
-                                    {' | Battery: '}{device?.battery || 0}%
+                    {/* Column 2: Device Info + Sync Button */}
+                    <View style={styles.deviceRightColumn}>
+                        {/* Row 1: Device Info */}
+                        <TouchableOpacity style={styles.deviceInfo}>
+                            <View style={styles.deviceHeader}>
+                                <Text style={[styles.deviceName, { color: colors.text }]}>{device?.name || 'Unknown Device'}</Text>
+                            </View>
+                            <View style={styles.deviceStatus}>
+                                <View style={[styles.statusDot, { backgroundColor: isConnected ? colors.success : colors.error }]} />
+                                <Text style={[styles.statusText, { color: isConnected ? colors.success : colors.error }]}>
+                                    {isConnected ? 'Connected' : 'Disconnected'}
                                 </Text>
+                            </View>
+                            {isConnected && (
+                                <View style={styles.deviceStatus}>
+                                    <View style={[styles.statusDot, { backgroundColor: 'transparent' }]} />
+                                    <Text style={[styles.batteryText, { color: colors.textSecondary }]}>
+                                        Battery: {device?.battery || 0}%
+                                        {' | Last charged '}{device?.lastCharged || 'N/A'} days ago
+                                    </Text>
+                                </View>
                             )}
-                        </View>
-                    </View>
-                </TouchableOpacity>
+                        </TouchableOpacity>
 
-                {/* Sync Button */}
-                <TouchableOpacity
-                    style={[styles.syncButton, { backgroundColor: colors.tint }, syncing && styles.syncButtonDisabled]}
-                    onPress={handleSync}
-                    disabled={syncing}
-                >
-                    {syncing ? (
-                        <Text style={styles.syncButtonText}>Syncing...</Text>
-                    ) : (
-                        <>
-                            <Ionicons name="sync" size={20} color="#FFFFFF" />
-                            <Text style={styles.syncButtonText}>Sync</Text>
-                        </>
-                    )}
-                </TouchableOpacity>
+                        {/* Row 2: Sync Button */}
+                        <TouchableOpacity
+                            style={[styles.syncButton, { backgroundColor: colors.lightTint }, syncing && styles.syncButtonDisabled]}
+                            onPress={handleSync}
+                            disabled={syncing}
+                        >
+                            {syncing ? (
+                                <Text style={[styles.syncButtonText, { color: colors.tint }]}>Syncing...</Text>
+                            ) : (
+                                <>
+                                    <Ionicons name="sync" size={20} style={{ color: colors.tint }} />
+                                    <Text style={[styles.syncButtonText, { color: colors.tint }]}>Sync</Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                </View>
             </View>
 
-            {/* Watch Faces */}
+            {/* My Devices */}
             <View style={[styles.section, { backgroundColor: colors.cardBackground }]}>
                 <View style={styles.sectionHeader}>
-                    <Text style={[styles.sectionTitle, { color: colors.text }]}>Online</Text>
-                    <TouchableOpacity>
-                        <Text style={[styles.sectionLink, { color: colors.info }]}>All</Text>
-                        <Ionicons name="chevron-forward" size={16} color={colors.info} style={styles.chevron} />
+                    <Text style={[styles.sectionTitle, { color: colors.text }]}>My Devices</Text>
+                    <TouchableOpacity onPress={loadDeviceHistory} >
+                        <Ionicons name="refresh" size={20} color={colors.tint} />
                     </TouchableOpacity>
                 </View>
 
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.watchFacesContainer}
-                >
-                    {mockWatchFaces.map((watchFace) => (
-                        <TouchableOpacity
-                            key={watchFace.id}
-                            style={[styles.watchFaceCard, { backgroundColor: colors.cardBackground }]}
-                            onPress={() => handleWatchFaceSelect(watchFace)}
-                        >
-                            <View style={[styles.watchFaceImage, { backgroundColor: colors.divider }]}>
-                                <Text style={styles.watchFaceEmoji}>{watchFace.thumbnail}</Text>
-                            </View>
-                            <Text style={[styles.watchFaceName, { color: colors.text }]}>{watchFace.name}</Text>
-                        </TouchableOpacity>
-                    ))}
-                </ScrollView>
+                {deviceHistory.length === 0 ? (
+                    <View style={styles.emptyDevicesContainer}>
+                        <Text style={[styles.emptyDevicesText, { color: colors.textSecondary }]}>
+                            No devices found. Connect a device to get started.
+                        </Text>
+                    </View>
+                ) : (
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.watchFacesContainer}
+                    >
+                        {deviceHistory.map((savedDevice) => (
+                            <TouchableOpacity
+                                key={savedDevice.id}
+                                style={[styles.watchFaceCard, { backgroundColor: colors.cardBackground }]}
+                                onPress={() => handleWatchFaceSelect(savedDevice)}
+                            >
+                                <View style={[styles.watchFaceImage, { backgroundColor: colors.divider }]}>
+                                    {savedDevice.image ? (
+                                        <Image
+                                            source={{ uri: savedDevice.image }}
+                                            style={styles.savedDeviceImage}
+                                            resizeMode="contain"
+                                        />
+                                    ) : (
+                                        <Image
+                                            source={require('../../assets/images/device.png')}
+                                            style={styles.savedDeviceImage}
+                                            resizeMode="contain"
+                                        />
+                                    )}
+                                </View>
+                                <Text style={[styles.watchFaceName, { color: colors.text }]} numberOfLines={1}>
+                                    {savedDevice.name}
+                                </Text>
+                                {savedDevice.id === device?.id && (
+                                    <View style={[styles.activeDeviceBadge, { backgroundColor: colors.success }]}>
+                                        <Text style={styles.activeDeviceText}>Active</Text>
+                                    </View>
+                                )}
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                )}
             </View>
 
             {/* Settings List */}
@@ -254,35 +318,35 @@ export default function DeviceScreen() {
                     icon="notifications"
                     iconColor={colors.warning}
                     title="Notifications and calls"
-                    onPress={() => Alert.alert('Notifications', 'Configure notification settings')}
+                    onPress={() => router.push('/notification-settings')}
                     colors={colors}
                 />
                 <SettingItem
                     icon="fitness"
                     iconColor={colors.heartRateColor}
                     title="Fitness and health"
-                    onPress={() => Alert.alert('Fitness', 'Configure fitness tracking')}
+                    onPress={() => showToast.info('Feature coming soon')}
                     colors={colors}
                 />
                 <SettingItem
                     icon="apps"
                     iconColor={colors.info}
                     title="Apps"
-                    onPress={() => Alert.alert('Apps', 'Manage device apps')}
+                    onPress={() => showToast.info('Feature coming soon')}
                     colors={colors}
                 />
                 <SettingItem
                     icon="alarm"
                     iconColor={colors.sleepColor}
                     title="Alarms"
-                    onPress={() => Alert.alert('Alarms', 'Manage alarms')}
+                    onPress={() => showToast.info('Feature coming soon')}
                     colors={colors}
                 />
                 <SettingItem
                     icon="settings"
                     iconColor={colors.textSecondary}
                     title="System settings"
-                    onPress={() => Alert.alert('Settings', 'System settings')}
+                    onPress={() => showToast.info('Feature coming soon')}
                     colors={colors}
                 />
             </View>
@@ -380,8 +444,8 @@ const styles = StyleSheet.create({
         height: 200,
     },
     deviceImagePlaceHolder: {
-        width: 90,
-        height: 90,
+        width: '100%',
+        height: '100%',
     },
     addDeviceButton: {
         flexDirection: 'row',
@@ -403,20 +467,20 @@ const styles = StyleSheet.create({
     deviceCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 20,
-    },
-    deviceImageContainer: {
-        marginRight: 16,
     },
     watchPlaceholder: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
+        width: 160,
+        height: 160,
         justifyContent: 'center',
         alignItems: 'center',
     },
+    deviceRightColumn: {
+        flex: 1,
+        justifyContent: 'space-between',
+    },
     deviceInfo: {
         flex: 1,
+        marginBottom: 16,
     },
     deviceHeader: {
         flexDirection: 'row',
@@ -440,15 +504,18 @@ const styles = StyleSheet.create({
     },
     statusText: {
         fontSize: 14,
+        fontWeight: 'bold'
     },
     batteryText: {
         fontSize: 14,
+        fontWeight: 'bold'
     },
     syncButton: {
         flexDirection: 'row',
-        borderRadius: 12,
-        paddingVertical: 16,
-        paddingHorizontal: 24,
+        alignSelf: 'flex-start',
+        borderRadius: 24,
+        paddingVertical: 12,
+        paddingHorizontal: 20,
         justifyContent: 'center',
         alignItems: 'center',
         gap: 8,
@@ -457,13 +524,14 @@ const styles = StyleSheet.create({
         backgroundColor: '#C7C7CC',
     },
     syncButtonText: {
-        color: '#FFFFFF',
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: '600',
     },
     section: {
         marginTop: 24,
         paddingVertical: 16,
+        borderRadius: 12,
+        marginHorizontal: 16,
     },
     sectionHeader: {
         flexDirection: 'row',
@@ -481,8 +549,7 @@ const styles = StyleSheet.create({
     },
     chevron: {
         position: 'absolute',
-        right: -18,
-        top: 2,
+        right: 0,
     },
     watchFacesContainer: {
         paddingHorizontal: 16,
@@ -499,12 +566,38 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 8,
+        overflow: 'hidden',
+    },
+    savedDeviceImage: {
+        width: '100%',
+        height: '100%',
     },
     watchFaceEmoji: {
         fontSize: 40,
     },
     watchFaceName: {
         fontSize: 12,
+        textAlign: 'center',
+        maxWidth: 80,
+    },
+    activeDeviceBadge: {
+        marginTop: 4,
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 8,
+    },
+    activeDeviceText: {
+        fontSize: 10,
+        fontWeight: '600',
+        color: '#FFFFFF',
+    },
+    emptyDevicesContainer: {
+        paddingHorizontal: 20,
+        paddingVertical: 24,
+        alignItems: 'center',
+    },
+    emptyDevicesText: {
+        fontSize: 14,
         textAlign: 'center',
     },
     settingsList: {

@@ -67,4 +67,5 @@ export const deviceToasts = {
     syncError: (message?: string) => showToast.error(message || 'Failed to sync device data', 'Sync Failed'),
     connected: (deviceName: string) => showToast.success(`Connected to ${deviceName}`, 'Device Connected'),
     disconnected: () => showToast.info('Device disconnected', 'Disconnected'),
+    connectionFailed: (deviceName: string) => showToast.error(`Could not connect to ${deviceName}. Make sure device is nearby and powered on.`, 'Connection Failed'),
 };

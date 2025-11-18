@@ -50,6 +50,7 @@ export interface WearableDevice {
     connected: boolean;
     battery: number;
     image?: string;
+    lastCharged?: number;
 }
 
 export interface WatchFace {

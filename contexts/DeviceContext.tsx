@@ -3,6 +3,7 @@ import React, { createContext, ReactNode, useContext, useEffect, useState } from
 import { BLEService } from '../services/bleService';
 import { dataSyncService } from '../services/dataSync';
 import { DeviceStorage } from '../services/deviceStorage';
+import { healthHistoryService } from '../services/healthHistoryService';
 import { BLEHealthData, WearableDevice } from '../types';
 
 interface DeviceContextType {
@@ -15,6 +16,8 @@ interface DeviceContextType {
     syncDeviceData: () => Promise<void>;
     disconnectDevice: () => Promise<void>;
     forceSyncToServer: () => Promise<boolean>;
+    reconnectToDevice: (deviceId: string) => Promise<boolean>;
+    getDeviceHistory: () => Promise<WearableDevice[]>;
 }
 
 const DeviceContext = createContext<DeviceContextType | undefined>(undefined);
@@ -47,6 +50,19 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
                 // Update device state
                 setDeviceState(prev => prev ? { ...prev, connected } : null);
+
+                // If disconnected, try to reconnect
+                if (!connected) {
+                    console.log('[DeviceContext] Device disconnected, attempting auto-reconnect...');
+                    setTimeout(async () => {
+                        const reconnected = await reconnectToDevice(device.id);
+                        if (reconnected) {
+                            console.log('[DeviceContext] Auto-reconnect successful');
+                        } else {
+                            console.log('[DeviceContext] Auto-reconnect failed');
+                        }
+                    }, 2000); // Wait 2s before reconnecting
+                }
             }
         }
     };
@@ -61,9 +77,12 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             // Start data sync service
             dataSyncService.start(device.id, device.name);
 
-            BLEService.subscribeToHealthData(device.id, (data) => {
+            BLEService.subscribeToHealthData(device.id, async (data) => {
                 console.log('[DeviceContext] Received health data:', data);
                 setHealthData(data);
+
+                // Save to health history for charts
+                await healthHistoryService.addHealthData(data);
 
                 // Add to sync buffer
                 dataSyncService.addData(data);
@@ -96,6 +115,29 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             // Update storage with actual connection status
             if (actuallyConnected !== savedDevice.connected) {
                 await DeviceStorage.updateConnectionStatus(actuallyConnected);
+            }
+
+            // If not connected, try auto-reconnect
+            if (!actuallyConnected) {
+                console.log('[DeviceContext] Device not connected, attempting auto-reconnect...');
+                const reconnected = await reconnectToDevice(savedDevice.id);
+                if (!reconnected) {
+                    console.log('[DeviceContext] Auto-reconnect failed, will retry periodically');
+                }
+            }
+        } else {
+            // No saved device, try to connect to most recent device in history
+            console.log('[DeviceContext] No saved device, checking history...');
+            const history = await DeviceStorage.getDeviceHistory();
+            if (history.length > 0) {
+                const mostRecent = history[0];
+                console.log('[DeviceContext] Attempting to connect to most recent device:', mostRecent.name);
+                const connected = await reconnectToDevice(mostRecent.id);
+                if (connected) {
+                    console.log('[DeviceContext] Auto-connected to most recent device');
+                } else {
+                    console.log('[DeviceContext] Failed to auto-connect to most recent device');
+                }
             }
         }
     };
@@ -157,6 +199,36 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         return result;
     };
 
+    const reconnectToDevice = async (deviceId: string): Promise<boolean> => {
+        try {
+            console.log('[DeviceContext] Reconnecting to device:', deviceId);
+
+            // Try to connect
+            const connected = await BLEService.connectToDevice(deviceId);
+
+            if (connected) {
+                // Get device from history
+                const history = await DeviceStorage.getDeviceHistory();
+                const targetDevice = history.find(d => d.id === deviceId);
+
+                if (targetDevice) {
+                    const updatedDevice = { ...targetDevice, connected: true };
+                    await setDevice(updatedDevice);
+                    return true;
+                }
+            }
+
+            return false;
+        } catch (error) {
+            console.error('[DeviceContext] Reconnect failed:', error);
+            return false;
+        }
+    };
+
+    const getDeviceHistory = async (): Promise<WearableDevice[]> => {
+        return await DeviceStorage.getDeviceHistory();
+    };
+
     return (
         <DeviceContext.Provider
             value={{
@@ -169,6 +241,8 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                 syncDeviceData,
                 disconnectDevice,
                 forceSyncToServer,
+                reconnectToDevice,
+                getDeviceHistory,
             }}
         >
             {children}

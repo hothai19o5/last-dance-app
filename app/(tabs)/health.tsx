@@ -1,12 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useFocusEffect } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { BarChart } from 'react-native-gifted-charts';
+import { BarChart, LineChart } from 'react-native-gifted-charts';
 import ActivityRings from '../../components/ActivityRings';
 import AddMenuToggle from '../../components/AddMenuToggle';
 import { useDevice } from '../../contexts/DeviceContext';
 import { useTheme, useThemeColors } from '../../contexts/ThemeContext';
+import { healthHistoryService } from '../../services/healthHistoryService';
+import { notificationSettingsService } from '../../services/notificationSettings';
+import { userProfileService } from '../../services/userProfileService';
+import { UserProfile } from '../../types';
 import { deviceToasts, showToast } from '../../utils/toast';
 
 const { width } = Dimensions.get('window');
@@ -17,7 +22,56 @@ export default function HealthScreen() {
     const { healthData, device, pendingSyncCount, forceSyncToServer } = useDevice();
     const fadeAnim = useRef(new Animated.Value(1)).current;
     const [showAddMenu, setShowAddMenu] = useState(false);
-    const [showAlert, setShowAlert] = useState(false);
+    const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+    const [heartRateChartData, setHeartRateChartData] = useState<{ value: number }[]>([]);
+    const [spO2ChartData, setSpO2ChartData] = useState<{ value: number }[]>([]);
+    const [weightHistory, setWeightHistory] = useState<number[]>([]);
+
+    // Load user profile when screen comes into focus
+    useFocusEffect(
+        React.useCallback(() => {
+            loadUserProfile();
+            loadChartData();
+        }, [])
+    );
+
+    const loadUserProfile = async () => {
+        const profile = await userProfileService.getProfile();
+        setUserProfile(profile);
+    };
+
+    const loadChartData = async () => {
+        const hrData = await healthHistoryService.getHeartRateChartData();
+        const spo2Data = await healthHistoryService.getSpO2ChartData();
+        const history = await healthHistoryService.getHistory();
+
+        setHeartRateChartData(hrData);
+        setSpO2ChartData(spo2Data);
+
+        // For weight, we'll show last 12 weight entries (if available, otherwise just current)
+        if (userProfile?.weight && history.heartRate.length > 0) {
+            // Simulate weight history based on number of health data points
+            const weightArray = Array(12).fill(0);
+            const dataPoints = Math.min(history.heartRate.length, 12);
+            const startIdx = 12 - dataPoints;
+            for (let i = 0; i < dataPoints; i++) {
+                weightArray[startIdx + i] = userProfile.weight;
+            }
+            setWeightHistory(weightArray);
+        } else if (userProfile?.weight) {
+            // Only current weight available
+            const weightArray = Array(12).fill(0);
+            weightArray[11] = userProfile.weight;
+            setWeightHistory(weightArray);
+        } else {
+            setWeightHistory(Array(12).fill(0));
+        }
+    };
+
+    // Reload chart data when health data changes
+    useEffect(() => {
+        loadChartData();
+    }, [healthData, userProfile?.weight]);
 
     // Health goals
     const caloriesGoal = 200;
@@ -30,15 +84,24 @@ export default function HealthScreen() {
     const currentSteps = healthData?.steps || 0;
     const currentCalories = healthData?.calories || 0;
     const alertScore = healthData?.alertScore;
+    const userWeight = userProfile?.weight || null;
 
-    // Show alert when alertScore is present and >= 0.5
+    // Show alert toast when alertScore is present and >= 0.5
     useEffect(() => {
-        if (alertScore !== null && alertScore !== undefined && alertScore >= 0.5) {
-            setShowAlert(true);
-            // Auto hide after 10 seconds
-            const timer = setTimeout(() => setShowAlert(false), 10000);
-            return () => clearTimeout(timer);
-        }
+        const checkAndShowAlert = async () => {
+            if (alertScore !== null && alertScore !== undefined && alertScore >= 0.5) {
+                // Check if alert notifications are enabled
+                const isEnabled = await notificationSettingsService.isAlertNotificationsEnabled();
+                if (isEnabled) {
+                    showToast.error(
+                        '⚠️ Abnormal Vitals Detected',
+                        `Alert Score: ${(alertScore * 100).toFixed(0)}% • HR: ${heartRate} bpm • SpO₂: ${spo2}%`
+                    );
+                }
+            }
+        };
+
+        checkAndShowAlert();
     }, [alertScore]);
 
     // Fade animation on theme change
@@ -79,17 +142,14 @@ export default function HealthScreen() {
         {
             value: stepsPercent / 100 > 1 ? 1 : stepsPercent / 100,
             color: colors.stepsColor,
-            backgroundColor: colors.border,
         },
         {
             value: standingPercent / 100 > 1 ? 1 : standingPercent / 100,
             color: colors.standingColor,
-            backgroundColor: colors.border,
         },
         {
             value: caloriesPercent / 100 > 1 ? 1 : caloriesPercent / 100,
             color: colors.caloriesColor,
-            backgroundColor: colors.border,
         },
     ];
 
@@ -99,19 +159,6 @@ export default function HealthScreen() {
         radius: 80,
         ringSize: 16,
     };
-
-    // Create mock history for charts (will be replaced with real data later)
-    const mockHeartRateHistory = Array(12).fill(heartRate || 64);
-    const mockSpO2History = Array(12).fill(spo2 || 98);
-
-    const heartRateChartData = mockHeartRateHistory.map((bpm: number) => ({
-        value: bpm,
-    }));
-
-    // Prepare SpO2 chart data
-    const spO2ChartData = mockSpO2History.map((val: number) => ({
-        value: val,
-    }));
 
     // Menu items for add button
     const menuItems = [
@@ -175,22 +222,6 @@ export default function HealthScreen() {
                         </TouchableOpacity>
                     </View>
                 </View>
-
-                {/* Alert Banner */}
-                {showAlert && alertScore !== null && alertScore !== undefined && (
-                    <View style={[styles.alertBanner, { backgroundColor: colors.danger + '15', borderColor: colors.danger }]}>
-                        <Ionicons name="warning" size={24} color={colors.danger} />
-                        <View style={{ flex: 1, marginLeft: 12 }}>
-                            <Text style={[styles.alertTitle, { color: colors.danger }]}>⚠️ Abnormal Vitals Detected</Text>
-                            <Text style={[styles.alertText, { color: colors.text }]}>
-                                Alert Score: {(alertScore * 100).toFixed(0)}% • HR: {heartRate} bpm • SpO₂: {spo2}%
-                            </Text>
-                        </View>
-                        <TouchableOpacity onPress={() => setShowAlert(false)}>
-                            <Ionicons name="close-circle" size={24} color={colors.danger} />
-                        </TouchableOpacity>
-                    </View>
-                )}
 
                 {/* Summary Circle */}
                 <View style={styles.summaryContainer}>
@@ -275,7 +306,7 @@ export default function HealthScreen() {
                                 barWidth={6}
                                 spacing={5}
                                 barBorderRadius={4}
-                                frontColor={colors.heartRateColor}
+                                frontColor={heartRate > 0 ? colors.heartRateColor : colors.heartRateColor + '40'}
                                 yAxisThickness={0}
                                 xAxisThickness={0}
                                 hideRules
@@ -307,7 +338,7 @@ export default function HealthScreen() {
                                 barWidth={6}
                                 spacing={5}
                                 barBorderRadius={4}
-                                frontColor={colors.spO2Color}
+                                frontColor={spo2 > 0 ? colors.spO2Color : colors.spO2Color + '40'}
                                 yAxisThickness={0}
                                 xAxisThickness={0}
                                 hideRules
@@ -319,7 +350,7 @@ export default function HealthScreen() {
                         </View>
                     </TouchableOpacity>
 
-                    {/* Weight Card - No data available */}
+                    {/* Weight Card - From user profile with chart */}
                     <TouchableOpacity style={[styles.detailCard, { backgroundColor: colors.cardBackground }]}>
                         <View style={styles.cardHeader}>
                             <View style={[styles.circleIcon, { backgroundColor: colors.weightIconBg }]}>
@@ -327,8 +358,35 @@ export default function HealthScreen() {
                             </View>
                             <Text style={[styles.cardTitle, { color: colors.text }]}>Weight</Text>
                         </View>
-                        <Text style={[styles.cardValue, { color: colors.text }]}>-- kg</Text>
-                        <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>No data</Text>
+                        <Text style={[styles.cardValue, { color: colors.text }]}>
+                            {userWeight !== null ? `${userWeight} kg` : '-- kg'}
+                        </Text>
+                        <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>
+                            {userWeight !== null ? 'From profile' : 'No data'}
+                        </Text>
+
+                        {/* Weight Chart - LineChart */}
+                        <View style={styles.chartContainer}>
+                            <LineChart
+                                data={weightHistory.map(value => ({ value }))}
+                                curved
+                                thickness={2}
+                                color={userWeight !== null ? (colors.weightColor || colors.warning) : (colors.weightColor || colors.warning) + '40'}
+                                yAxisThickness={0}
+                                xAxisThickness={0}
+                                hideRules
+                                hideYAxisText
+                                hideDataPoints={weightHistory.filter(v => v > 0).length <= 1}
+                                dataPointsColor={colors.weightColor || colors.warning}
+                                dataPointsRadius={3}
+                                height={60}
+                                width={(width - 44) / 2 - 32}
+                                noOfSections={3}
+                                startFillColor={(colors.weightColor || colors.warning) + '40'}
+                                endFillColor={(colors.weightColor || colors.warning) + '10'}
+                                areaChart
+                            />
+                        </View>
                     </TouchableOpacity>
 
                     {/* Sleep Card - No data available */}
@@ -421,24 +479,6 @@ const styles = StyleSheet.create({
     syncBadgeText: {
         fontSize: 12,
         fontWeight: '600',
-    },
-    alertBanner: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginHorizontal: 20,
-        marginTop: 16,
-        padding: 16,
-        borderRadius: 12,
-        borderWidth: 1,
-    },
-    alertTitle: {
-        fontSize: 16,
-        fontWeight: '700',
-        marginBottom: 4,
-    },
-    alertText: {
-        fontSize: 13,
-        opacity: 0.8,
     },
     summaryContainer: {
         paddingVertical: 0,

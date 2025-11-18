@@ -129,11 +129,34 @@ class ApiService {
     }
 
     /**
+     * Fetch with timeout
+     */
+    private async fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number = 10000): Promise<Response> {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+        try {
+            const response = await fetch(url, {
+                ...options,
+                signal: controller.signal,
+            });
+            clearTimeout(timeoutId);
+            return response;
+        } catch (error: any) {
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') {
+                throw new Error('Request timeout after 10 seconds');
+            }
+            throw error;
+        }
+    }
+
+    /**
      * Generic GET request
      */
     async get<T>(endpoint: string, requiresAuth: boolean = true): Promise<T> {
         const headers = await this.getHeaders(requiresAuth);
-        const response = await fetch(this.getUrl(endpoint), {
+        const response = await this.fetchWithTimeout(this.getUrl(endpoint), {
             method: 'GET',
             headers,
         });
@@ -146,7 +169,7 @@ class ApiService {
      */
     async post<T, R>(endpoint: string, data: T, requiresAuth: boolean = true): Promise<R> {
         const headers = await this.getHeaders(requiresAuth);
-        const response = await fetch(this.getUrl(endpoint), {
+        const response = await this.fetchWithTimeout(this.getUrl(endpoint), {
             method: 'POST',
             headers,
             body: JSON.stringify(data),
@@ -160,7 +183,7 @@ class ApiService {
      */
     async put<T, R>(endpoint: string, data: T, requiresAuth: boolean = true): Promise<R> {
         const headers = await this.getHeaders(requiresAuth);
-        const response = await fetch(this.getUrl(endpoint), {
+        const response = await this.fetchWithTimeout(this.getUrl(endpoint), {
             method: 'PUT',
             headers,
             body: JSON.stringify(data),
@@ -174,7 +197,7 @@ class ApiService {
      */
     async delete<T>(endpoint: string, requiresAuth: boolean = true): Promise<T> {
         const headers = await this.getHeaders(requiresAuth);
-        const response = await fetch(this.getUrl(endpoint), {
+        const response = await this.fetchWithTimeout(this.getUrl(endpoint), {
             method: 'DELETE',
             headers,
         });

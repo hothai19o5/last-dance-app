@@ -369,8 +369,8 @@ const styles = StyleSheet.create({
     },
     avatarBadge: {
         position: 'absolute',
-        bottom: 0,
-        right: 0,
+        bottom: 15,
+        right: 15,
         width: 36,
         height: 36,
         borderRadius: 18,

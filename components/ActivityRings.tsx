@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 
 interface RingProps {
@@ -7,14 +7,16 @@ interface RingProps {
     stroke: number;
     color: string;
     percent: number;
-    backgroundColor?: string;
     containerSize: number;
 }
 
-const Ring: React.FC<RingProps> = ({ radius, stroke, color, percent, backgroundColor = '#e6e6e6', containerSize }) => {
+const Ring: React.FC<RingProps> = ({ radius, stroke, color, percent, containerSize }) => {
     const circumference = 2 * Math.PI * radius;
     const offset = circumference - (percent / 100) * circumference;
     const center = containerSize / 2;
+
+    // Create light background color from the ring color (20% opacity)
+    const backgroundColor = color + '33'; // Add 33 for ~20% opacity in hex
 
     return (
         <Svg width={containerSize} height={containerSize} style={StyleSheet.absoluteFill}>
@@ -48,7 +50,6 @@ const Ring: React.FC<RingProps> = ({ radius, stroke, color, percent, backgroundC
 interface ActivityRingData {
     value: number; // 0 to 1
     color: string;
-    backgroundColor?: string;
 }
 
 interface ActivityRingsConfig {
@@ -81,7 +82,6 @@ const ActivityRings: React.FC<ActivityRingsProps> = ({ data, config }) => {
                         stroke={ringSize}
                         color={ring.color}
                         percent={percent}
-                        backgroundColor={ring.backgroundColor}
                         containerSize={containerSize}
                     />
                 );
