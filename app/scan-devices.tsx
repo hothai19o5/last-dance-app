@@ -3,6 +3,8 @@ import { Stack, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useDevice } from '../contexts/DeviceContext';
+import { apiService } from '../services/api';
+import { authService } from '../services/authService';
 import { useThemeColors } from '../contexts/ThemeContext';
 import { BLEService } from '../services/bleService';
 import { WearableDevice } from '../types';
@@ -68,11 +70,36 @@ export default function ScanDevicesScreen() {
                 },
                 {
                     text: 'Connect',
-                    onPress: async () => {
+                        onPress: async () => {
                         try {
                             // Real BLE connection
                             const connected = await BLEService.connectToDevice(device.id);
                             if (connected) {
+                                // Register device on backend before accepting
+                                try {
+                                    const userInfo = await authService.getUserInfo();
+                                    const username = userInfo?.username || '';
+
+                                    const regBody = {
+                                        deviceUuid: device.id,
+                                        deviceName: device.name,
+                                        username,
+                                    };
+
+                                    await apiService.registerDevice(regBody);
+                                    console.log('[Scan] Device registered successfully on server');
+                                } catch (err) {
+                                    console.error('[Scan] Device registration failed:', err);
+                                    // If registration failed, disconnect BLE and show error
+                                    try {
+                                        await BLEService.disconnectDevice(device.id);
+                                    } catch (dErr) {
+                                        console.error('[BLE] Error disconnecting after failed registration:', dErr);
+                                    }
+                                    Alert.alert('Error', 'Device registration failed. Connection cancelled.');
+                                    return;
+                                }
+
                                 // Tạo đối tượng thiết bị
                                 const wearableDevice: WearableDevice = {
                                     id: device.id,

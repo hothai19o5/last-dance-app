@@ -2,7 +2,7 @@
 import { authService } from "./authService";
 
 // API Base URL - Update this to your actual server URL
-const API_BASE_URL = 'http://192.168.0.104:8080/api/v1';
+const API_BASE_URL = 'http://192.168.14.132:8080/api/v1';
 
 // API Endpoints
 export const API_ENDPOINTS = {
@@ -11,7 +11,10 @@ export const API_ENDPOINTS = {
     REGISTER: '/register',
 
     // Health Data
-    HEALTH_DATA: '/healthdata',
+    HEALTH_DATA: '/sync/health-data',
+
+    // Device registration
+    DEVICE: '/device',
 };
 
 // Request/Response Types
@@ -48,6 +51,12 @@ export interface HealthDataDto {
     dataPoints: HealthDataPoint[];
 }
 
+export interface DeviceRegistrationRequest {
+    deviceUuid: string;
+    deviceName: string;
+    username: string;
+}
+
 export interface ApiError {
     message: string;
     status?: number;
@@ -79,6 +88,9 @@ class ApiService {
             const token = await authService.getAccessToken();
             if (token) {
                 headers['Authorization'] = `Bearer ${token}`;
+                console.log('[API] Adding auth token to headers');
+            } else {
+                console.warn('[API] No auth token found for authenticated request');
             }
         }
 
@@ -103,6 +115,12 @@ class ApiService {
                 }
             }
 
+            console.error('[API] Request failed:', {
+                status: response.status,
+                message: errorMessage,
+                url: response.url,
+            });
+
             const error: ApiError = {
                 message: errorMessage,
                 status: response.status,
@@ -110,6 +128,7 @@ class ApiService {
 
             // If unauthorized, clear token
             if (response.status === 401) {
+                console.warn('[API] Unauthorized - clearing tokens');
                 await authService.clearTokens();
             }
 
@@ -122,8 +141,11 @@ class ApiService {
         }
 
         try {
-            return JSON.parse(text);
+            const parsed = JSON.parse(text);
+            console.log('[API] Response parsed successfully:', typeof parsed);
+            return parsed;
         } catch {
+            console.warn('[API] Response is not JSON, returning as text');
             return text as unknown as T;
         }
     }
@@ -230,10 +252,22 @@ class ApiService {
             false // No auth required for login
         );
 
+        console.log('[API] Login response received:', { hasToken: !!response.token });
+
         // Save token after successful login
         if (response.token) {
             await authService.saveAccessToken(response.token);
-            console.log('[API] Token saved successfully');
+            console.log('[API] ✅ Token saved successfully');
+
+            // Verify token was saved
+            const savedToken = await authService.getAccessToken();
+            if (!savedToken) {
+                console.error('[API] ❌ Token save verification failed!');
+            } else {
+                console.log('[API] ✅ Token save verified');
+            }
+        } else {
+            console.warn('[API] ⚠️ No token in login response');
         }
 
         return response;
@@ -248,6 +282,18 @@ class ApiService {
         console.log('[API] Sending health data:', data.dataPoints.length, 'points');
         return this.post<HealthDataDto, { message: string }>(
             API_ENDPOINTS.HEALTH_DATA,
+            data,
+            true // Requires authentication
+        );
+    }
+
+    /**
+     * Register a device with the backend for the current user
+     */
+    async registerDevice(data: DeviceRegistrationRequest): Promise<{ message?: string }> {
+        console.log('[API] Registering device on server:', data.deviceUuid);
+        return this.post<DeviceRegistrationRequest, { message?: string }>(
+            API_ENDPOINTS.DEVICE,
             data,
             true // Requires authentication
         );

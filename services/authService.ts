@@ -17,7 +17,7 @@ class AuthService {
     async saveAccessToken(token: string): Promise<void> {
         try {
             await AsyncStorage.setItem(ACCESS_TOKEN_KEY, token);
-            console.log('[Auth] Access token saved');
+            console.log('[Auth] Access token saved successfully, length:', token.length);
         } catch (error) {
             console.error('[Auth] Failed to save access token:', error);
             throw error;
@@ -30,6 +30,11 @@ class AuthService {
     async getAccessToken(): Promise<string | null> {
         try {
             const token = await AsyncStorage.getItem(ACCESS_TOKEN_KEY);
+            if (token) {
+                console.log('[Auth] Access token retrieved:', token);
+            } else {
+                console.log('[Auth] No access token found in storage');
+            }
             return token;
         } catch (error) {
             console.error('[Auth] Failed to get access token:', error);

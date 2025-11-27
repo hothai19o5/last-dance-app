@@ -66,6 +66,13 @@ class DataSyncService {
             return true;
         }
 
+        // Check if user is authenticated before syncing
+        const isAuthenticated = await apiService.isAuthenticated();
+        if (!isAuthenticated) {
+            console.warn('[DataSync] ⚠️ User not authenticated, skipping sync');
+            return false;
+        }
+
         // Convert BLEHealthData to HealthDataPoint format
         const dataPoints: HealthDataPoint[] = this.dataBuffer.map(data => ({
             timestamp: data.timestamp,
@@ -93,7 +100,7 @@ class DataSyncService {
             console.error('[DataSync] ❌ Sync error:', error);
             // If unauthorized, user needs to login again
             if (error.status === 401) {
-                console.error('[DataSync] Unauthorized - Please login again');
+                console.error('[DataSync] 🔒 Unauthorized - Token may be invalid or expired. Please login again');
             }
             return false;
         }
