@@ -4,11 +4,13 @@ import { BLEService } from '../services/bleService';
 import { dataSyncService } from '../services/dataSync';
 import { DeviceStorage } from '../services/deviceStorage';
 import { healthHistoryService } from '../services/healthHistoryService';
-import { BLEHealthData, WearableDevice } from '../types';
+import { userProfileService } from '../services/userProfileService';
+import { BLEBatchData, BLEConfig, BLEHealthData, WearableDevice } from '../types';
 
 interface DeviceContextType {
     device: WearableDevice | null;
     healthData: BLEHealthData | null;
+    batteryLevel: number;
     isConnected: boolean;
     pendingSyncCount: number;
     setDevice: (device: WearableDevice | null) => void;
@@ -18,6 +20,7 @@ interface DeviceContextType {
     forceSyncToServer: () => Promise<boolean>;
     reconnectToDevice: (deviceId: string) => Promise<boolean>;
     getDeviceHistory: () => Promise<WearableDevice[]>;
+    sendUserProfileToDevice: (deviceId: string) => Promise<boolean>;
 }
 
 const DeviceContext = createContext<DeviceContextType | undefined>(undefined);
@@ -25,6 +28,7 @@ const DeviceContext = createContext<DeviceContextType | undefined>(undefined);
 export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [device, setDeviceState] = useState<WearableDevice | null>(null);
     const [healthData, setHealthData] = useState<BLEHealthData | null>(null);
+    const [batteryLevel, setBatteryLevel] = useState<number>(100);
     const [isConnected, setIsConnected] = useState(false);
     const [pendingSyncCount, setPendingSyncCount] = useState(0);
 
@@ -69,33 +73,92 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
     // Subscribe to health data when device is connected
     useEffect(() => {
-        let unsubscribe: (() => void) | null = null;
+        let unsubscribeHealth: (() => void) | null = null;
+        let unsubscribeBattery: (() => void) | null = null;
 
         if (device?.connected && device.id) {
-            console.log('[DeviceContext] Subscribing to health data...');
+            console.log('[DeviceContext] Subscribing to health data and battery...');
 
             // Start data sync service
             dataSyncService.start(device.id, device.name);
 
-            BLEService.subscribeToHealthData(device.id, async (data) => {
-                console.log('[DeviceContext] Received health data:', data);
-                setHealthData(data);
+            // Subscribe to health data (alerts and batch data)
+            BLEService.subscribeToHealthData(
+                device.id,
+                // Callback for single readings/alerts
+                async (data: BLEHealthData) => {
+                    console.log('[DeviceContext] Received health data:', data);
+                    setHealthData(data);
 
-                // Save to health history for charts
-                await healthHistoryService.addHealthData(data);
+                    // Save to health history for charts
+                    await healthHistoryService.addHealthData(data);
 
-                // Add to sync buffer
-                dataSyncService.addData(data);
-                setPendingSyncCount(dataSyncService.getBufferSize());
+                    // Add to sync buffer (alerts are important, sync immediately)
+                    if (data.alertScore !== null && data.alertScore > 0.95) {
+                        console.log('[DeviceContext] ALERT! Score:', data.alertScore);
+                        dataSyncService.addData(data);
+                        dataSyncService.forceSyncNow(); // Sync alerts immediately
+                    } else {
+                        dataSyncService.addData(data);
+                    }
+                    setPendingSyncCount(dataSyncService.getBufferSize());
+                },
+                // Callback for batch data (5-minute data)
+                async (batchData: BLEBatchData) => {
+                    console.log('[DeviceContext] Received batch data:', batchData.count, 'samples');
+
+                    // Convert batch data to individual health data points for history
+                    const baseTime = Date.now() - (batchData.count * 1000); // Estimate start time
+                    for (let i = 0; i < batchData.count; i++) {
+                        const singleData: BLEHealthData = {
+                            heartRate: batchData.hr[i],
+                            spo2: batchData.spo2[i],
+                            steps: 0, // Not included in batch
+                            alertScore: null,
+                            timestamp: new Date(baseTime + (i * 1000)).toISOString(),
+                        };
+                        await healthHistoryService.addHealthData(singleData);
+                        dataSyncService.addData(singleData);
+                    }
+
+                    // Update current health data with latest from batch
+                    const latestIndex = batchData.count - 1;
+                    setHealthData({
+                        heartRate: batchData.hr[latestIndex],
+                        spo2: batchData.spo2[latestIndex],
+                        steps: 0,
+                        alertScore: null,
+                        timestamp: new Date().toISOString(),
+                    });
+
+                    setPendingSyncCount(dataSyncService.getBufferSize());
+
+                    // Sync batch data to server
+                    await dataSyncService.forceSyncNow();
+                }
+            ).then((unsub) => {
+                unsubscribeHealth = unsub;
+            });
+
+            // Subscribe to battery notifications
+            BLEService.subscribeToBattery(device.id, async (level: number) => {
+                console.log('[DeviceContext] Battery updated:', level, '%');
+                setBatteryLevel(level);
+                await DeviceStorage.updateBatteryLevel(level);
+                setDeviceState(prev => prev ? { ...prev, battery: level } : null);
             }).then((unsub) => {
-                unsubscribe = unsub;
+                unsubscribeBattery = unsub;
             });
         }
 
         return () => {
-            if (unsubscribe) {
+            if (unsubscribeHealth) {
                 console.log('[DeviceContext] Unsubscribing from health data');
-                unsubscribe();
+                unsubscribeHealth();
+            }
+            if (unsubscribeBattery) {
+                console.log('[DeviceContext] Unsubscribing from battery');
+                unsubscribeBattery();
             }
             // Stop sync service when device disconnects
             dataSyncService.stop();
@@ -229,11 +292,54 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         return await DeviceStorage.getDeviceHistory();
     };
 
+    /**
+     * Gửi thông tin user profile xuống thiết bị IoT sau khi kết nối BLE
+     */
+    const sendUserProfileToDevice = async (deviceId: string): Promise<boolean> => {
+        try {
+            console.log('[DeviceContext] Sending user profile to device...');
+
+            // Get user profile from storage
+            const profile = await userProfileService.getProfile();
+            if (!profile) {
+                console.warn('[DeviceContext] No user profile found, using defaults');
+            }
+
+            // Map gender to number (1=Male, 0=Female)
+            const genderNum = profile?.gender === 'Male' ? 1 : (profile?.gender === 'Female' ? 0 : 1);
+
+            // Prepare BLE config
+            const bleConfig: BLEConfig = {
+                height: profile?.height ? profile.height / 100 : 1.70, // Convert cm to meters
+                weight: profile?.weight || 65,
+                age: profile?.age || 25,
+                gender: genderNum,
+            };
+
+            console.log('[DeviceContext] Sending config:', bleConfig);
+
+            // Write config to device
+            const success = await BLEService.writeConfig(deviceId, bleConfig);
+
+            if (success) {
+                console.log('[DeviceContext] ✅ User profile sent to device successfully');
+            } else {
+                console.error('[DeviceContext] ❌ Failed to send user profile to device');
+            }
+
+            return success;
+        } catch (error) {
+            console.error('[DeviceContext] Error sending user profile:', error);
+            return false;
+        }
+    };
+
     return (
         <DeviceContext.Provider
             value={{
                 device,
                 healthData,
+                batteryLevel,
                 isConnected,
                 pendingSyncCount,
                 setDevice,
@@ -243,6 +349,7 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                 forceSyncToServer,
                 reconnectToDevice,
                 getDeviceHistory,
+                sendUserProfileToDevice,
             }}
         >
             {children}

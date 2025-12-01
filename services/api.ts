@@ -2,7 +2,7 @@
 import { authService } from "./authService";
 
 // API Base URL - Update this to your actual server URL
-const API_BASE_URL = 'http://192.168.14.132:8080/api/v1';
+const API_BASE_URL = 'http://192.168.0.104:8080/api/v1';
 
 // API Endpoints
 export const API_ENDPOINTS = {

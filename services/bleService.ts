@@ -2,8 +2,8 @@
 import { Buffer } from 'buffer';
 import { PermissionsAndroid, Platform } from 'react-native';
 import { BleManager, State } from 'react-native-ble-plx';
-import { BLEConfig, BLEDevice } from '../types';
-import { encodeUserProfile, parseHealthDataJSON } from '../utils/bleDebug';
+import { BLEBatchData, BLEConfig, BLEDevice, BLEHealthData } from '../types';
+import { encodeUserProfile, parseBatchData, parseHealthDataJSON } from '../utils/bleDebug';
 
 const bleManager = new BleManager();
 
@@ -16,7 +16,15 @@ const AGE_CHAR_UUID = '00002A80-0000-1000-8000-00805F9B34FB';
 
 const HEALTH_DATA_SERVICE_UUID = '0000180D-0000-1000-8000-00805F9B34FB';
 const HEALTH_DATA_BATCH_CHAR_UUID = '00002A37-0000-1000-8000-00805F9B34FB';
-const DEVICE_STATUS_CHAR_UUID = '00002A19-0000-1000-8000-00805F9B34FB';
+
+// Battery Service (separate from Health Data Service)
+const BATTERY_SERVICE_UUID = '0000180F-0000-1000-8000-00805F9B34FB';
+const BATTERY_LEVEL_CHAR_UUID = '00002A19-0000-1000-8000-00805F9B34FB';
+
+// Callback types for data received
+export type OnHealthDataCallback = (data: BLEHealthData) => void;
+export type OnBatchDataCallback = (data: BLEBatchData) => void;
+export type OnBatteryCallback = (level: number) => void;
 
 export class BLEService {
   // Request BLE permissions (Android)
@@ -244,8 +252,8 @@ export class BLEService {
     try {
       const characteristic = await bleManager.readCharacteristicForDevice(
         deviceId,
-        HEALTH_DATA_SERVICE_UUID,
-        DEVICE_STATUS_CHAR_UUID
+        BATTERY_SERVICE_UUID,
+        BATTERY_LEVEL_CHAR_UUID
       );
 
       if (characteristic.value) {
@@ -261,10 +269,49 @@ export class BLEService {
     }
   }
 
-  // Subscribe to health data notifications
+  // Subscribe to battery level notifications
+  static async subscribeToBattery(
+    deviceId: string,
+    onBatteryReceived: OnBatteryCallback
+  ): Promise<() => void> {
+    console.log('[BLE] Subscribing to battery notifications...');
+
+    try {
+      const subscription = bleManager.monitorCharacteristicForDevice(
+        deviceId,
+        BATTERY_SERVICE_UUID,
+        BATTERY_LEVEL_CHAR_UUID,
+        (error, characteristic) => {
+          if (error) {
+            console.error('[BLE] Battery monitor error:', error);
+            return;
+          }
+
+          if (characteristic?.value) {
+            const batteryData = Buffer.from(characteristic.value, 'base64');
+            const batteryLevel = batteryData.readUInt8(0);
+            console.log('[BLE] Battery notification:', batteryLevel, '%');
+            onBatteryReceived(batteryLevel);
+          }
+        }
+      );
+
+      console.log('[BLE] Successfully subscribed to battery');
+      return () => {
+        subscription.remove();
+        console.log('[BLE] Unsubscribed from battery');
+      };
+    } catch (error) {
+      console.error('[BLE] Battery subscribe error:', error);
+      return () => { };
+    }
+  }
+
+  // Subscribe to health data notifications (handles both single readings and batch data)
   static async subscribeToHealthData(
     deviceId: string,
-    onDataReceived: (data: any) => void
+    onDataReceived: OnHealthDataCallback,
+    onBatchReceived?: OnBatchDataCallback
   ): Promise<() => void> {
     console.log('[BLE] Subscribing to health data notifications...');
 
@@ -306,17 +353,31 @@ export class BLEService {
 
             // Check if we have complete JSON (ends with })
             if (jsonBuffer.trim().endsWith('}')) {
-              // Try to parse complete JSON
-              const healthData = parseHealthDataJSON(Buffer.from(jsonBuffer, 'utf-8').toString('base64'));
+              try {
+                const jsonData = JSON.parse(jsonBuffer.trim());
 
-              if (healthData) {
-                const dataWithTimestamp = {
-                  ...healthData,
-                  timestamp: new Date().toISOString(),
-                };
-
-                console.log('[BLE] Received health data:', dataWithTimestamp);
-                onDataReceived(dataWithTimestamp);
+                // Check if this is batch data or single reading/alert
+                if (jsonData.type === 'batch') {
+                  // Batch data (5-minute data)
+                  const batchData = parseBatchData(jsonData);
+                  if (batchData && onBatchReceived) {
+                    console.log('[BLE] Received batch data:', batchData.count, 'samples');
+                    onBatchReceived(batchData);
+                  }
+                } else {
+                  // Single reading or alert
+                  const healthData = parseHealthDataJSON(Buffer.from(jsonBuffer, 'utf-8').toString('base64'));
+                  if (healthData) {
+                    const dataWithTimestamp: BLEHealthData = {
+                      ...healthData,
+                      timestamp: new Date().toISOString(),
+                    };
+                    console.log('[BLE] Received health data:', dataWithTimestamp);
+                    onDataReceived(dataWithTimestamp);
+                  }
+                }
+              } catch (parseError) {
+                console.error('[BLE] JSON parse error:', parseError);
               }
 
               // Clear buffer for next message

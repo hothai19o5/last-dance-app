@@ -79,7 +79,8 @@ class DataSyncService {
             heartRate: data.heartRate,
             spo2: data.spo2,
             stepCount: data.steps,
-            caloriesBurned: data.calories,
+            caloriesBurned: 0, // Not available in new format
+            alertScore: data.alertScore, // Include ML alert score if present
         }));
 
         const healthDataDto: HealthDataDto = {

@@ -3,9 +3,9 @@ import { Stack, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useDevice } from '../contexts/DeviceContext';
+import { useThemeColors } from '../contexts/ThemeContext';
 import { apiService } from '../services/api';
 import { authService } from '../services/authService';
-import { useThemeColors } from '../contexts/ThemeContext';
 import { BLEService } from '../services/bleService';
 import { WearableDevice } from '../types';
 
@@ -18,7 +18,7 @@ interface ScannedDevice {
 export default function ScanDevicesScreen() {
     const colors = useThemeColors();
     const router = useRouter();
-    const { setDevice } = useDevice();
+    const { setDevice, sendUserProfileToDevice } = useDevice();
     const [scanning, setScanning] = useState(false);
     const [devices, setDevices] = useState<ScannedDevice[]>([]);
 
@@ -70,7 +70,7 @@ export default function ScanDevicesScreen() {
                 },
                 {
                     text: 'Connect',
-                        onPress: async () => {
+                    onPress: async () => {
                         try {
                             // Real BLE connection
                             const connected = await BLEService.connectToDevice(device.id);
@@ -115,6 +115,18 @@ export default function ScanDevicesScreen() {
                                     wearableDevice.battery = battery;
                                 } catch (error) {
                                     console.log('[BLE] Could not read battery level');
+                                }
+
+                                // Gửi user profile xuống thiết bị IoT
+                                try {
+                                    const profileSent = await sendUserProfileToDevice(device.id);
+                                    if (profileSent) {
+                                        console.log('[Scan] User profile sent to device successfully');
+                                    } else {
+                                        console.warn('[Scan] Failed to send user profile to device');
+                                    }
+                                } catch (error) {
+                                    console.error('[Scan] Error sending user profile:', error);
                                 }
 
                                 // Lưu vào context

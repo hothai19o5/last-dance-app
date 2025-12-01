@@ -85,12 +85,27 @@ export interface BLEConfig {
     gender: number;  // 0: Male, 1: Female
 }
 
-// Health data received from ESP32 device
+// Health data received from ESP32 device (single reading or alert)
 export interface BLEHealthData {
     heartRate: number;      // hr (bpm)
     spo2: number;          // spo2 (%)
     steps: number;         // steps count
-    calories: number;      // calories (kcal)
-    alertScore: number | null;  // ML alert score (0-1)
+    alertScore: number | null;  // ML alert score (0-1), only present when > 0.95
     timestamp: string;     // ISO timestamp
+}
+
+// Batch health data received from ESP32 device (every 5 minutes)
+export interface BLEBatchData {
+    type: 'batch';          // Always 'batch' for batch data
+    count: number;          // Number of samples (max 300)
+    startTs: number;        // Timestamp of first sample (seconds from boot)
+    interval: number;       // Interval between samples (1 second)
+    hr: number[];           // Array of heart rates (BPM)
+    spo2: number[];         // Array of SpO2 values (%)
+}
+
+// Battery data from ESP32 device
+export interface BLEBatteryData {
+    level: number;          // Battery percentage (0-100)
+    timestamp: string;      // ISO timestamp
 }

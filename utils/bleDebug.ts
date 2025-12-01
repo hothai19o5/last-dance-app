@@ -1,6 +1,7 @@
 // BLE Debug Utilities
 import { Buffer } from 'buffer';
 import { BleManager } from 'react-native-ble-plx';
+import { BLEBatchData, BLEHealthData } from '../types';
 
 const bleManager = new BleManager();
 
@@ -150,10 +151,14 @@ export function parseHeartRate(base64Value: string): number {
 }
 
 /**
- * Parse health data JSON from ESP32
+ * Parse health data JSON from ESP32 (single reading or alert)
  * Handles incomplete JSON and chunked data
+ * 
+ * Expected format:
+ * - Alert: {"hr": 120, "spo2": 85, "steps": 1500, "ts": 3600, "alert": 0.9876}
+ * - Normal (not sent currently, only alerts)
  */
-export function parseHealthDataJSON(base64Value: string): any {
+export function parseHealthDataJSON(base64Value: string): Omit<BLEHealthData, 'timestamp'> | null {
     try {
         // Validate input
         if (!base64Value || base64Value.length === 0) {
@@ -165,9 +170,7 @@ export function parseHealthDataJSON(base64Value: string): any {
 
         // Debug: log raw data
         console.log('[BLE DEBUG] Raw base64 length:', base64Value.length);
-        console.log('[BLE DEBUG] Raw base64:', base64Value);
         console.log('[BLE DEBUG] Decoded string:', jsonString);
-        console.log('[BLE DEBUG] String length:', jsonString.length);
 
         // Check if string is empty or incomplete
         const trimmed = jsonString.trim();
@@ -191,26 +194,67 @@ export function parseHealthDataJSON(base64Value: string): any {
             return null;
         }
 
+        // Skip batch data (handled separately)
+        if (data.type === 'batch') {
+            console.log('[BLE] Received batch data, skipping single parse');
+            return null;
+        }
+
         console.log('[BLE DEBUG] Successfully parsed:', data);
 
-        // ESP32 sends: {hr, spo2, steps, cal, ts, alert (optional)}
+        // ESP32 sends: {hr, spo2, steps, ts, alert (optional)}
         // Map to our app's format
         return {
             heartRate: data.hr || 0,
             spo2: data.spo2 || 0,
             steps: data.steps || 0,
-            calories: data.cal || data.calories || 0,  // ESP32 uses "cal" not "calories"
-            alertScore: data.alert !== undefined ? data.alert : null,  // ESP32 uses "alert" not "alert_score"
+            alertScore: data.alert !== undefined ? data.alert : null,
         };
     } catch (error) {
         console.error('[BLE] Parse health data error:', error);
-        try {
-            const decoded = Buffer.from(base64Value, 'base64').toString('utf-8');
-            console.error('[BLE] Failed string (length=' + decoded.length + '):', decoded);
-            console.error('[BLE] Failed string (hex):', Buffer.from(base64Value, 'base64').toString('hex'));
-        } catch (e) {
-            console.error('[BLE] Could not decode failed value');
+        return null;
+    }
+}
+
+/**
+ * Parse batch data JSON from ESP32 (5-minute batch)
+ * 
+ * Expected format:
+ * {
+ *   "type": "batch",
+ *   "count": 300,
+ *   "start_ts": 12345,
+ *   "interval": 1,
+ *   "hr": [75, 76, 74, ...],
+ *   "spo2": [98, 97, 98, ...]
+ * }
+ */
+export function parseBatchData(data: any): BLEBatchData | null {
+    try {
+        if (!data || data.type !== 'batch') {
+            console.warn('[BLE] Not a batch data object');
+            return null;
         }
+
+        // Validate required fields
+        if (!Array.isArray(data.hr) || !Array.isArray(data.spo2)) {
+            console.warn('[BLE] Batch data missing hr or spo2 arrays');
+            return null;
+        }
+
+        const batchData: BLEBatchData = {
+            type: 'batch',
+            count: data.count || data.hr.length,
+            startTs: data.start_ts || 0,
+            interval: data.interval || 1,
+            hr: data.hr,
+            spo2: data.spo2,
+        };
+
+        console.log('[BLE DEBUG] Parsed batch data:', batchData.count, 'samples');
+        return batchData;
+    } catch (error) {
+        console.error('[BLE] Parse batch data error:', error);
         return null;
     }
 }
