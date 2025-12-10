@@ -76,8 +76,10 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         let unsubscribeHealth: (() => void) | null = null;
         let unsubscribeBattery: (() => void) | null = null;
 
-        if (device?.connected && device.id) {
-            console.log('[DeviceContext] Subscribing to health data and battery...');
+        // Use isConnected state instead of device?.connected for more accurate tracking
+        if (isConnected && device?.id) {
+            console.log('[DeviceContext] Device connected, subscribing to health data and battery...');
+            console.log('[DeviceContext] Device ID:', device.id, 'isConnected:', isConnected);
 
             // Start data sync service
             dataSyncService.start(device.id, device.name);
@@ -113,7 +115,7 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                         const singleData: BLEHealthData = {
                             heartRate: batchData.hr[i],
                             spo2: batchData.spo2[i],
-                            steps: 0, // Not included in batch
+                            steps: i === batchData.count - 1 ? (batchData.steps || 0) : 0,
                             alertScore: null,
                             timestamp: new Date(baseTime + (i * 1000)).toISOString(),
                         };
@@ -126,7 +128,7 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                     setHealthData({
                         heartRate: batchData.hr[latestIndex],
                         spo2: batchData.spo2[latestIndex],
-                        steps: 0,
+                        steps: batchData.steps || 0,
                         alertScore: null,
                         timestamp: new Date().toISOString(),
                     });
@@ -138,6 +140,9 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                 }
             ).then((unsub) => {
                 unsubscribeHealth = unsub;
+                console.log('[DeviceContext] Health data subscription established');
+            }).catch((error) => {
+                console.error('[DeviceContext] Failed to subscribe to health data:', error);
             });
 
             // Subscribe to battery notifications
@@ -148,7 +153,12 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                 setDeviceState(prev => prev ? { ...prev, battery: level } : null);
             }).then((unsub) => {
                 unsubscribeBattery = unsub;
+                console.log('[DeviceContext] Battery subscription established');
+            }).catch((error) => {
+                console.error('[DeviceContext] Failed to subscribe to battery:', error);
             });
+        } else {
+            console.log('[DeviceContext] Not subscribing - isConnected:', isConnected, 'deviceId:', device?.id);
         }
 
         return () => {
@@ -163,7 +173,7 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             // Stop sync service when device disconnects
             dataSyncService.stop();
         };
-    }, [device?.id, device?.connected]);
+    }, [device?.id, isConnected]); // Changed from device?.connected to isConnected
 
     const loadDevice = async () => {
         const savedDevice = await DeviceStorage.getConnectedDevice();

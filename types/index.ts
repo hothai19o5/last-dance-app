@@ -102,6 +102,7 @@ export interface BLEBatchData {
     interval: number;       // Interval between samples (1 second)
     hr: number[];           // Array of heart rates (BPM)
     spo2: number[];         // Array of SpO2 values (%)
+    steps: number;          // Total steps in this batch
 }
 
 // Battery data from ESP32 device

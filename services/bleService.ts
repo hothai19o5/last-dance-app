@@ -315,20 +315,38 @@ export class BLEService {
   ): Promise<() => void> {
     console.log('[BLE] Subscribing to health data notifications...');
 
-    // Buffer for incomplete JSON chunks
+    // Buffer for reassembling fragmented JSON packets
     let jsonBuffer = '';
 
     try {
-      // Ensure device is connected and services are discovered
-      const device = await bleManager.connectToDevice(deviceId);
-      await device.discoverAllServicesAndCharacteristics();
+      // Check if device is already connected
+      const isAlreadyConnected = await bleManager.isDeviceConnected(deviceId);
+      let device;
 
-      // Request larger MTU for better data transfer (max 512)
-      try {
-        const mtu = await device.requestMTU(512);
-        console.log(`[BLE] MTU set to: ${mtu} bytes`);
-      } catch (error) {
-        console.log('[BLE] Could not set MTU, using default (23 bytes)');
+      if (!isAlreadyConnected) {
+        console.log('[BLE] Device not connected, connecting first...');
+        device = await bleManager.connectToDevice(deviceId);
+        await device.discoverAllServicesAndCharacteristics();
+      } else {
+        console.log('[BLE] Device already connected, reusing connection');
+        // Get device instance even if connected (needed for MTU request)
+        const devices = await bleManager.connectedDevices([HEALTH_DATA_SERVICE_UUID]);
+        device = devices.find(d => d.id === deviceId);
+        if (!device) {
+          // Fallback if not found in connected list (shouldn't happen if isDeviceConnected is true)
+          device = await bleManager.connectToDevice(deviceId);
+        }
+      }
+
+      // Always try to request larger MTU to minimize fragmentation
+      // Note: On Android, this negotiates. On iOS, it's automatic (and this call might be ignored or throw)
+      if (Platform.OS === 'android') {
+        try {
+          const mtu = await device.requestMTU(512);
+          console.log(`[BLE] MTU set to: ${mtu} bytes`);
+        } catch (error) {
+          console.log('[BLE] MTU request failed (okay if already set):', error);
+        }
       }
 
       // Small delay to ensure characteristics are ready
@@ -345,45 +363,56 @@ export class BLEService {
           }
 
           if (characteristic?.value) {
-            // Decode chunk
             const chunk = Buffer.from(characteristic.value, 'base64').toString('utf-8');
+            console.log(`[BLE] 📥 Received chunk (${chunk.length} chars):`, chunk.substring(0, 50) + (chunk.length > 50 ? '...' : ''));
 
-            // Add to buffer
+            // Heuristic: If a new JSON object starts and we have leftover garbage, clear it
+            if (chunk.trim().startsWith('{') && jsonBuffer.length > 0) {
+              // Only clear if the buffer doesn't look like it's waiting for this chunk
+              // (Simple check: if buffer ends with ',' or '[' or ':' it might be expecting more. 
+              // But if buffer is just garbage or we missed a packet, this helps recover.)
+              // For safety, let's just log warning. 
+              // If the previous JSON was incomplete, appending '{' will likely cause a parse error anyway,
+              // but clearing it ensures we start fresh for the new message.
+              console.warn('[BLE] ⚠️ New message start detected while buffer not empty. Resetting buffer.');
+              jsonBuffer = '';
+            }
+
             jsonBuffer += chunk;
 
-            // Check if we have complete JSON (ends with })
-            if (jsonBuffer.trim().endsWith('}')) {
-              try {
-                const jsonData = JSON.parse(jsonBuffer.trim());
+            try {
+              // Try to parse the accumulated buffer
+              // If jsonBuffer is incomplete, JSON.parse will throw
+              const jsonData = JSON.parse(jsonBuffer);
+              console.log('[BLE] ✅ Parsed JSON success');
 
-                // Check if this is batch data or single reading/alert
-                if (jsonData.type === 'batch') {
-                  // Batch data (5-minute data)
-                  const batchData = parseBatchData(jsonData);
-                  if (batchData && onBatchReceived) {
-                    console.log('[BLE] Received batch data:', batchData.count, 'samples');
-                    onBatchReceived(batchData);
-                  }
-                } else {
-                  // Single reading or alert
-                  const healthData = parseHealthDataJSON(Buffer.from(jsonBuffer, 'utf-8').toString('base64'));
-                  if (healthData) {
-                    const dataWithTimestamp: BLEHealthData = {
-                      ...healthData,
-                      timestamp: new Date().toISOString(),
-                    };
-                    console.log('[BLE] Received health data:', dataWithTimestamp);
-                    onDataReceived(dataWithTimestamp);
-                  }
+              // Check if this is batch data or single reading/alert
+              if (jsonData.type === 'batch') {
+                // Batch data (5-minute data)
+                const batchData = parseBatchData(jsonData);
+                if (batchData && onBatchReceived) {
+                  console.log('[BLE] 📊 Received batch data:', batchData.count, 'samples');
+                  onBatchReceived(batchData);
                 }
-              } catch (parseError) {
-                console.error('[BLE] JSON parse error:', parseError);
+              } else {
+                // Single reading or alert
+                const healthData: BLEHealthData = {
+                  heartRate: jsonData.hr || 0,
+                  spo2: jsonData.spo2 || 0,
+                  steps: jsonData.steps || 0,
+                  alertScore: jsonData.alert !== undefined ? jsonData.alert : null,
+                  timestamp: new Date().toISOString(),
+                };
+                console.log('[BLE] ❤️ Received health data:', healthData);
+                onDataReceived(healthData);
               }
 
-              // Clear buffer for next message
+              // Clear buffer after successful parse
               jsonBuffer = '';
-            } else {
-              console.log(`[BLE] Buffering chunk... (${jsonBuffer.length} chars so far)`);
+
+            } catch (parseError) {
+              // JSON is incomplete, wait for next chunk
+              console.log(`[BLE] ⏳ Buffering... (${jsonBuffer.length} chars)`);
             }
           }
         }
@@ -394,7 +423,7 @@ export class BLEService {
       // Return unsubscribe function
       return () => {
         subscription.remove();
-        jsonBuffer = ''; // Clear buffer on unsubscribe
+        jsonBuffer = '';
         console.log('[BLE] Unsubscribed from health data');
       };
     } catch (error) {

@@ -249,6 +249,7 @@ export function parseBatchData(data: any): BLEBatchData | null {
             interval: data.interval || 1,
             hr: data.hr,
             spo2: data.spo2,
+            steps: data.steps,
         };
 
         console.log('[BLE DEBUG] Parsed batch data:', batchData.count, 'samples');

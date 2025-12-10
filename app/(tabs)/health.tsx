@@ -82,7 +82,7 @@ export default function HealthScreen() {
     const heartRate = healthData?.heartRate || 0;
     const spo2 = healthData?.spo2 || 0;
     const currentSteps = healthData?.steps || 0;
-    const currentCalories = healthData?.calories || 0;
+    const currentCalories = 0;
     const alertScore = healthData?.alertScore;
     const userWeight = userProfile?.weight || null;
 
