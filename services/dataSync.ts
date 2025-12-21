@@ -75,7 +75,7 @@ class DataSyncService {
 
         // Convert BLEHealthData to HealthDataPoint format
         const dataPoints: HealthDataPoint[] = this.dataBuffer.map(data => ({
-            timestamp: data.timestamp,
+            timestamp: data.timestampISO,  // Use timestampISO (ISO string) instead of timestamp (unix)
             heartRate: data.heartRate,
             spo2: data.spo2,
             stepCount: data.steps,

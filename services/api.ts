@@ -2,7 +2,7 @@
 import { authService } from "./authService";
 
 // API Base URL - Update this to your actual server URL
-const API_BASE_URL = 'http://192.168.0.104:8080/api/v1';
+const API_BASE_URL = 'https://hoxuanthai.id.vn/api/v1';
 
 // API Endpoints
 export const API_ENDPOINTS = {
@@ -16,6 +16,12 @@ export const API_ENDPOINTS = {
     // Device registration
     DEVICE: '/device',
 };
+
+export interface ApiResponse<T> {
+    status: string;
+    message: string;
+    data: T;
+}
 
 // Request/Response Types
 export interface RegistrationRequest {
@@ -244,30 +250,30 @@ class ApiService {
     /**
      * Login user
      */
-    async login(data: LoginRequest): Promise<LoginResponse> {
+    async login(data: LoginRequest): Promise<ApiResponse<LoginResponse>> {
         console.log('[API] Logging in user:', data.username);
-        const response = await this.post<LoginRequest, LoginResponse>(
+        const response = await this.post<LoginRequest, ApiResponse<LoginResponse>>(
             API_ENDPOINTS.LOGIN,
             data,
             false // No auth required for login
         );
 
-        console.log('[API] Login response received:', { hasToken: !!response.token });
+        console.log('[API] Login response received:', { hasToken: !!response.data.token });
 
         // Save token after successful login
-        if (response.token) {
-            await authService.saveAccessToken(response.token);
-            console.log('[API] ✅ Token saved successfully');
+        if (response.data.token) {
+            await authService.saveAccessToken(response.data.token);
+            console.log('[API] Token saved successfully');
 
             // Verify token was saved
             const savedToken = await authService.getAccessToken();
             if (!savedToken) {
-                console.error('[API] ❌ Token save verification failed!');
+                console.error('[API] Token save verification failed!');
             } else {
-                console.log('[API] ✅ Token save verified');
+                console.log('[API] Token save verified');
             }
         } else {
-            console.warn('[API] ⚠️ No token in login response');
+            console.warn('[API] No token in login response');
         }
 
         return response;

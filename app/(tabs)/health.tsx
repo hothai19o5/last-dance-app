@@ -296,7 +296,7 @@ export default function HealthScreen() {
                         </View>
                         <Text style={[styles.cardValue, { color: colors.text }]}>{heartRate} BPM</Text>
                         <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>
-                            {healthData?.timestamp ? new Date(healthData.timestamp).toLocaleString() : 'No data'}
+                            {healthData?.timestampISO ? new Date(healthData.timestampISO).toLocaleString() : 'No data'}
                         </Text>
 
                         {/* Heart Rate Chart */}
@@ -328,7 +328,7 @@ export default function HealthScreen() {
                         </View>
                         <Text style={[styles.cardValue, { color: colors.text }]}>{spo2} %</Text>
                         <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>
-                            {healthData?.timestamp ? new Date(healthData.timestamp).toLocaleString() : 'No data'}
+                            {healthData?.timestampISO ? new Date(healthData.timestampISO).toLocaleString() : 'No data'}
                         </Text>
 
                         {/* SpO2 Chart */}

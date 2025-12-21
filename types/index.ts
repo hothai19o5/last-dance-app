@@ -79,30 +79,26 @@ export interface BLEDevice {
 }
 
 export interface BLEConfig {
-    height: number;  // in meters (e.g., 1.77)
-    weight: number;  // in kg (e.g., 65.0)
-    age: number;     // years
-    gender: number;  // 0: Male, 1: Female
+    bmi: number;           // BMI value (e.g., 22.5)
+    dataMode: number;      // 0: Realtime, 1: Batch
+    stepEnable: number;    // 0: Disabled, 1: Enabled
+    mlEnable: number;      // 0: Disabled, 1: Enabled (AI anomaly detection)
 }
 
-// Health data received from ESP32 device (single reading or alert)
+// Health data received from ESP32 device (binary packet - 10 or 14 bytes)
 export interface BLEHealthData {
-    heartRate: number;      // hr (bpm)
-    spo2: number;          // spo2 (%)
-    steps: number;         // steps count
-    alertScore: number | null;  // ML alert score (0-1), only present when > 0.95
-    timestamp: string;     // ISO timestamp
+    timestamp: number;          // Unix timestamp (uint32)
+    steps: number;              // Total step count (uint32)
+    heartRate: number;          // HR in BPM (uint8)
+    spo2: number;              // SpO2 in % (uint8)
+    alertScore: number | null;  // ML alert score (float, 0-1), present when packet is 14 bytes
+    timestampISO: string;      // ISO string for display/storage
 }
 
-// Batch health data received from ESP32 device (every 5 minutes)
+// Batch health data received from ESP32 device (N * 10 bytes)
 export interface BLEBatchData {
-    type: 'batch';          // Always 'batch' for batch data
-    count: number;          // Number of samples (max 300)
-    startTs: number;        // Timestamp of first sample (seconds from boot)
-    interval: number;       // Interval between samples (1 second)
-    hr: number[];           // Array of heart rates (BPM)
-    spo2: number[];         // Array of SpO2 values (%)
-    steps: number;          // Total steps in this batch
+    packets: BLEHealthData[];  // Array of parsed HealthDataPackets (10 bytes each)
+    count: number;             // Number of packets in this batch
 }
 
 // Battery data from ESP32 device

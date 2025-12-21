@@ -1,5 +1,5 @@
 // Device Context - Quản lý thiết bị và health data
-import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
+import React, { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
 import { BLEService } from '../services/bleService';
 import { dataSyncService } from '../services/dataSync';
 import { DeviceStorage } from '../services/deviceStorage';
@@ -31,6 +31,18 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const [batteryLevel, setBatteryLevel] = useState<number>(100);
     const [isConnected, setIsConnected] = useState(false);
     const [pendingSyncCount, setPendingSyncCount] = useState(0);
+
+    // Track previous sync count to avoid unnecessary re-renders
+    const prevSyncCountRef = useRef<number>(0);
+
+    // Helper function to update sync count only when changed
+    const updateSyncCount = () => {
+        const newCount = dataSyncService.getBufferSize();
+        if (newCount !== prevSyncCountRef.current) {
+            prevSyncCountRef.current = newCount;
+            setPendingSyncCount(newCount);
+        }
+    };
 
     // Load device on mount
     useEffect(() => {
@@ -103,37 +115,27 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                     } else {
                         dataSyncService.addData(data);
                     }
-                    setPendingSyncCount(dataSyncService.getBufferSize());
+                    updateSyncCount();
                 },
                 // Callback for batch data (5-minute data)
                 async (batchData: BLEBatchData) => {
                     console.log('[DeviceContext] Received batch data:', batchData.count, 'samples');
 
-                    // Convert batch data to individual health data points for history
-                    const baseTime = Date.now() - (batchData.count * 1000); // Estimate start time
-                    for (let i = 0; i < batchData.count; i++) {
-                        const singleData: BLEHealthData = {
-                            heartRate: batchData.hr[i],
-                            spo2: batchData.spo2[i],
-                            steps: i === batchData.count - 1 ? (batchData.steps || 0) : 0,
-                            alertScore: null,
-                            timestamp: new Date(baseTime + (i * 1000)).toISOString(),
-                        };
-                        await healthHistoryService.addHealthData(singleData);
-                        dataSyncService.addData(singleData);
+                    // Process each packet in the batch
+                    for (const packet of batchData.packets) {
+                        // Save to health history for charts
+                        await healthHistoryService.addHealthData(packet);
+                        // Add to sync buffer
+                        dataSyncService.addData(packet);
                     }
 
                     // Update current health data with latest from batch
-                    const latestIndex = batchData.count - 1;
-                    setHealthData({
-                        heartRate: batchData.hr[latestIndex],
-                        spo2: batchData.spo2[latestIndex],
-                        steps: batchData.steps || 0,
-                        alertScore: null,
-                        timestamp: new Date().toISOString(),
-                    });
+                    if (batchData.packets.length > 0) {
+                        const latestPacket = batchData.packets[batchData.packets.length - 1];
+                        setHealthData(latestPacket);
+                    }
 
-                    setPendingSyncCount(dataSyncService.getBufferSize());
+                    updateSyncCount();
 
                     // Sync batch data to server
                     await dataSyncService.forceSyncNow();
@@ -267,7 +269,7 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const forceSyncToServer = async (): Promise<boolean> => {
         const result = await dataSyncService.forceSyncNow();
         if (result) {
-            setPendingSyncCount(0);
+            updateSyncCount(); // Update with actual count after sync
         }
         return result;
     };
@@ -315,15 +317,17 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                 console.warn('[DeviceContext] No user profile found, using defaults');
             }
 
-            // Map gender to number (1=Male, 0=Female)
-            const genderNum = profile?.gender === 'Male' ? 1 : (profile?.gender === 'Female' ? 0 : 1);
+            // Calculate BMI from height and weight
+            const height = profile?.height ? profile.height / 100 : 1.70; // Convert cm to meters
+            const weight = profile?.weight || 65;
+            const bmi = weight / (height * height);
 
-            // Prepare BLE config
+            // Prepare BLE config with new characteristics
             const bleConfig: BLEConfig = {
-                height: profile?.height ? profile.height / 100 : 1.70, // Convert cm to meters
-                weight: profile?.weight || 65,
-                age: profile?.age || 25,
-                gender: genderNum,
+                bmi: parseFloat(bmi.toFixed(2)), // Round to 2 decimal places
+                dataMode: 0,      // 0: Realtime (default), 1: Batch
+                stepEnable: 1,    // 1: Enable step counting
+                mlEnable: 1,      // 1: Enable AI anomaly detection
             };
 
             console.log('[DeviceContext] Sending config:', bleConfig);

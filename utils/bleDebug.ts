@@ -1,9 +1,13 @@
-// BLE Debug Utilities
+// BLE Debug Utilities - Binary Protocol Parser
 import { Buffer } from 'buffer';
 import { BleManager } from 'react-native-ble-plx';
 import { BLEBatchData, BLEHealthData } from '../types';
 
 const bleManager = new BleManager();
+
+// Constants for packet sizes
+const HEALTH_PACKET_SIZE = 8;        // Basic HealthDataPacket (timestamp:4 + steps:2 + hr:1 + spo2:1)
+const HEALTH_PACKET_WITH_ALERT = 12; // HealthDataPacket (8 bytes) + AlertScore (float, 4 bytes)
 
 /**
  * List all services and characteristics of a connected device
@@ -88,43 +92,31 @@ export function monitorCharacteristic(
 }
 
 /**
- * Common Bluetooth Service UUIDs
+ * Common Bluetooth Service UUIDs (Last Dance Project)
  */
 export const STANDARD_SERVICES = {
-    // Standard BLE Services
-    BATTERY: '0000180F-0000-1000-8000-00805f9b34fb',
-    HEART_RATE: '0000180D-0000-1000-8000-00805f9b34fb',
-    DEVICE_INFO: '0000180A-0000-1000-8000-00805f9b34fb',
-    CURRENT_TIME: '00001805-0000-1000-8000-00805f9b34fb',
-    ALERT_NOTIFICATION: '00001811-0000-1000-8000-00805f9b34fb',
-    FITNESS_MACHINE: '00001826-0000-1000-8000-00805f9b34fb',
-
-    // ESP32 Custom Services
-    USER_PROFILE: '0000181C-0000-1000-8000-00805F9B34FB',
-    HEALTH_DATA: '0000180D-0000-1000-8000-00805F9B34FB',
+    // Last Dance Services
+    USER_PROFILE: '0000181C-0000-1000-8000-00805F9B34FB',  // Config & Time Sync
+    HEALTH_DATA: '0000180D-0000-1000-8000-00805F9B34FB',   // Health Data Stream
+    BATTERY: '0000180F-0000-1000-8000-00805F9B34FB',       // Battery Level
 };
 
 /**
- * Common Bluetooth Characteristic UUIDs
+ * Common Bluetooth Characteristic UUIDs (Last Dance Project)
  */
 export const STANDARD_CHARACTERISTICS = {
-    // Standard
-    BATTERY_LEVEL: '00002A19-0000-1000-8000-00805f9b34fb',
-    HEART_RATE_MEASUREMENT: '00002A37-0000-1000-8000-00805f9b34fb',
-    MANUFACTURER_NAME: '00002A29-0000-1000-8000-00805f9b34fb',
-    MODEL_NUMBER: '00002A24-0000-1000-8000-00805f9b34fb',
-    FIRMWARE_REVISION: '00002A26-0000-1000-8000-00805f9b34fb',
-    HARDWARE_REVISION: '00002A27-0000-1000-8000-00805f9b34fb',
+    // User Profile Service Characteristics
+    TIME_SYNC: '00002A2B-0000-1000-8000-00805F9B34FB',     // Write: uint32 (Unix Timestamp)
+    DATA_MODE: '00002A9A-0000-1000-8000-00805F9B34FB',     // R/W: uint8 (0=Realtime, 1=Batch)
+    BMI: '00002A98-0000-1000-8000-00805F9B34FB',           // R/W: float (BMI value)
+    STEP_ENABLE: '00002A81-0000-1000-8000-00805F9B34FB',   // R/W: uint8 (0=Off, 1=On)
+    ML_ENABLE: '00002A99-0000-1000-8000-00805F9B34FB',     // R/W: uint8 (0=Off, 1=On)
 
-    // ESP32 User Profile
-    WEIGHT: '00002A98-0000-1000-8000-00805F9B34FB',
-    HEIGHT: '00002A8E-0000-1000-8000-00805F9B34FB',
-    GENDER: '00002A8C-0000-1000-8000-00805F9B34FB',
-    AGE: '00002A80-0000-1000-8000-00805F9B34FB',
+    // Health Data Service Characteristics
+    HEALTH_DATA: '00002A37-0000-1000-8000-00805F9B34FB',   // Notify: Binary packets
 
-    // ESP32 Health Data
-    HEALTH_DATA_BATCH: '00002A37-0000-1000-8000-00805F9B34FB',
-    DEVICE_STATUS: '00002A19-0000-1000-8000-00805F9B34FB',
+    // Battery Service Characteristics
+    BATTERY_LEVEL: '00002A19-0000-1000-8000-00805F9B34FB', // Read/Notify: uint8 (0-100%)
 };
 
 /**
@@ -136,159 +128,188 @@ export function parseBatteryLevel(base64Value: string): number {
 }
 
 /**
- * Parse heart rate from characteristic value
+ * Parse a single HealthDataPacket (8 bytes) - Little Endian
+ * 
+ * Packet structure:
+ * - Offset 0-3: timestamp (uint32) - Unix Timestamp
+ * - Offset 4-5: steps (uint16) - Total step count
+ * - Offset 6: hr (uint8) - Heart rate in BPM
+ * - Offset 7: spo2 (uint8) - SpO2 percentage
+ * 
+ * @param buffer - Buffer containing exactly 8 bytes
+ * @returns Parsed health data (without alertScore)
  */
-export function parseHeartRate(base64Value: string): number {
-    const buffer = Buffer.from(base64Value, 'base64');
-    const flags = buffer.readUInt8(0);
-
-    // Check if heart rate is 16-bit
-    if (flags & 0x01) {
-        return buffer.readUInt16LE(1);
-    } else {
-        return buffer.readUInt8(1);
+export function parseHealthDataPacket(buffer: Buffer): Omit<BLEHealthData, 'alertScore' | 'timestampISO'> {
+    if (buffer.length < HEALTH_PACKET_SIZE) {
+        throw new Error(`Invalid packet size: ${buffer.length}, expected ${HEALTH_PACKET_SIZE}`);
     }
+
+    const timestamp = buffer.readUInt32LE(0);
+    const steps = buffer.readUInt16LE(4);
+    const heartRate = buffer.readUInt8(6);
+    const spo2 = buffer.readUInt8(7);
+
+    return {
+        timestamp,
+        steps,
+        heartRate,
+        spo2,
+    };
 }
 
 /**
- * Parse health data JSON from ESP32 (single reading or alert)
- * Handles incomplete JSON and chunked data
+ * Parse health data from BLE notification (base64 encoded)
+ * Handles 3 cases:
+ * 1. 8 bytes: Normal packet (HealthDataPacket)
+ * 2. 12 bytes: Packet with alert (HealthDataPacket + float AlertScore)
+ * 3. N*8 bytes: Batch data (multiple HealthDataPackets)
  * 
- * Expected format:
- * - Alert: {"hr": 120, "spo2": 85, "steps": 1500, "ts": 3600, "alert": 0.9876}
- * - Normal (not sent currently, only alerts)
+ * @param base64Value - Base64 encoded binary data from BLE
+ * @returns Parsed data with appropriate type
  */
-export function parseHealthDataJSON(base64Value: string): Omit<BLEHealthData, 'timestamp'> | null {
+export function parseHealthDataNotification(base64Value: string): {
+    type: 'single' | 'alert' | 'batch';
+    data: BLEHealthData | BLEBatchData;
+} | null {
     try {
-        // Validate input
         if (!base64Value || base64Value.length === 0) {
             console.warn('[BLE] Received empty base64 value');
             return null;
         }
 
-        const jsonString = Buffer.from(base64Value, 'base64').toString('utf-8');
+        const buffer = Buffer.from(base64Value, 'base64');
+        const length = buffer.length;
 
-        // Debug: log raw data
-        console.log('[BLE DEBUG] Raw base64 length:', base64Value.length);
-        console.log('[BLE DEBUG] Decoded string:', jsonString);
+        console.log(`[BLE] Received ${length} bytes`);
 
-        // Check if string is empty or incomplete
-        const trimmed = jsonString.trim();
-        if (!trimmed || trimmed.length === 0) {
-            console.warn('[BLE] Received empty data after trimming, skipping...');
-            return null;
+        // Case 1: Single packet (8 bytes)
+        if (length === HEALTH_PACKET_SIZE) {
+            const packet = parseHealthDataPacket(buffer);
+            const healthData: BLEHealthData = {
+                ...packet,
+                alertScore: null,
+                timestampISO: new Date(packet.timestamp * 1000).toISOString(),
+            };
+            console.log('[BLE] ❤️ Parsed single packet:', healthData);
+            return { type: 'single', data: healthData };
         }
 
-        // Check if it looks like valid JSON (starts with { and ends with })
-        if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
-            console.warn('[BLE] Data does not look like complete JSON:', trimmed);
-            return null;
+        // Case 2: Packet with alert (12 bytes)
+        if (length === HEALTH_PACKET_WITH_ALERT) {
+            const packet = parseHealthDataPacket(buffer);
+            const alertScore = buffer.readFloatLE(8);
+
+            const healthData: BLEHealthData = {
+                ...packet,
+                alertScore,
+                timestampISO: new Date(packet.timestamp * 1000).toISOString(),
+            };
+            console.log('[BLE] 🚨 Parsed alert packet:', healthData);
+            return { type: 'alert', data: healthData };
         }
 
-        // Try to parse JSON
-        const data = JSON.parse(trimmed);
+        // Case 3: Batch data (N * 8 bytes)
+        if (length % HEALTH_PACKET_SIZE === 0) {
+            const count = length / HEALTH_PACKET_SIZE;
+            const packets: BLEHealthData[] = [];
 
-        // Validate that we got the expected fields
-        if (typeof data !== 'object' || data === null) {
-            console.warn('[BLE] Parsed data is not an object:', data);
-            return null;
+            for (let i = 0; i < count; i++) {
+                const offset = i * HEALTH_PACKET_SIZE;
+                const packetBuffer = buffer.subarray(offset, offset + HEALTH_PACKET_SIZE);
+                const packet = parseHealthDataPacket(packetBuffer);
+
+                packets.push({
+                    ...packet,
+                    alertScore: null,
+                    timestampISO: new Date(packet.timestamp * 1000).toISOString(),
+                });
+            }
+
+            const batchData: BLEBatchData = {
+                packets,
+                count,
+            };
+
+            console.log('[BLE] 📊 Parsed batch data:', count, 'packets');
+            return { type: 'batch', data: batchData };
         }
 
-        // Skip batch data (handled separately)
-        if (data.type === 'batch') {
-            console.log('[BLE] Received batch data, skipping single parse');
-            return null;
-        }
+        // Invalid packet size
+        console.error('[BLE] Invalid packet size:', length);
+        return null;
 
-        console.log('[BLE DEBUG] Successfully parsed:', data);
-
-        // ESP32 sends: {hr, spo2, steps, ts, alert (optional)}
-        // Map to our app's format
-        return {
-            heartRate: data.hr || 0,
-            spo2: data.spo2 || 0,
-            steps: data.steps || 0,
-            alertScore: data.alert !== undefined ? data.alert : null,
-        };
     } catch (error) {
-        console.error('[BLE] Parse health data error:', error);
+        console.error('[BLE] Parse error:', error);
         return null;
     }
 }
 
 /**
- * Parse batch data JSON from ESP32 (5-minute batch)
- * 
- * Expected format:
- * {
- *   "type": "batch",
- *   "count": 300,
- *   "start_ts": 12345,
- *   "interval": 1,
- *   "hr": [75, 76, 74, ...],
- *   "spo2": [98, 97, 98, ...]
- * }
+ * Encode Unix timestamp for Time Sync (uint32, Little Endian)
+ * @param timestamp - Unix timestamp in seconds (or Date object)
+ * @returns Base64 encoded string
  */
-export function parseBatchData(data: any): BLEBatchData | null {
-    try {
-        if (!data || data.type !== 'batch') {
-            console.warn('[BLE] Not a batch data object');
-            return null;
-        }
+export function encodeTimeSync(timestamp?: number | Date): string {
+    let unixTime: number;
 
-        // Validate required fields
-        if (!Array.isArray(data.hr) || !Array.isArray(data.spo2)) {
-            console.warn('[BLE] Batch data missing hr or spo2 arrays');
-            return null;
-        }
-
-        const batchData: BLEBatchData = {
-            type: 'batch',
-            count: data.count || data.hr.length,
-            startTs: data.start_ts || 0,
-            interval: data.interval || 1,
-            hr: data.hr,
-            spo2: data.spo2,
-            steps: data.steps,
-        };
-
-        console.log('[BLE DEBUG] Parsed batch data:', batchData.count, 'samples');
-        return batchData;
-    } catch (error) {
-        console.error('[BLE] Parse batch data error:', error);
-        return null;
+    if (timestamp instanceof Date) {
+        unixTime = Math.floor(timestamp.getTime() / 1000);
+    } else if (typeof timestamp === 'number') {
+        unixTime = timestamp;
+    } else {
+        unixTime = Math.floor(Date.now() / 1000);
     }
+
+    const buffer = Buffer.alloc(4);
+    buffer.writeUInt32LE(unixTime, 0);
+    return buffer.toString('base64');
 }
 
 /**
- * Encode user profile data for ESP32
+ * Encode BMI value (float, Little Endian)
+ * @param bmi - BMI value (e.g., 22.5)
+ * @returns Base64 encoded string
  */
-export function encodeUserProfile(height: number, weight: number, age: number, gender: number): {
-    weight: string;
-    height: string;
-    gender: string;
-    age: string;
+export function encodeBMI(bmi: number): string {
+    const buffer = Buffer.alloc(4);
+    buffer.writeFloatLE(bmi, 0);
+    return buffer.toString('base64');
+}
+
+/**
+ * Encode uint8 value (Data Mode, Step Enable, ML Enable)
+ * @param value - Value to encode (0 or 1)
+ * @returns Base64 encoded string
+ */
+export function encodeUInt8(value: number): string {
+    const buffer = Buffer.alloc(1);
+    buffer.writeUInt8(value, 0);
+    return buffer.toString('base64');
+}
+
+/**
+ * Encode config values for writing to device
+ * @param bmi - BMI value
+ * @param dataMode - 0: Realtime, 1: Batch
+ * @param stepEnable - 0: Off, 1: On
+ * @param mlEnable - 0: Off, 1: On
+ * @returns Object with base64 encoded values
+ */
+export function encodeUserProfile(
+    bmi: number,
+    dataMode: number,
+    stepEnable: number,
+    mlEnable: number
+): {
+    bmi: string;
+    dataMode: string;
+    stepEnable: string;
+    mlEnable: string;
 } {
-    // Weight: uint16 in kg
-    const weightBuffer = Buffer.alloc(2);
-    weightBuffer.writeUInt16LE(Math.round(weight), 0);
-
-    // Height: uint16 in cm
-    const heightBuffer = Buffer.alloc(2);
-    heightBuffer.writeUInt16LE(Math.round(height * 100), 0);
-
-    // Gender: uint8 (0=male, 1=female)
-    const genderBuffer = Buffer.alloc(1);
-    genderBuffer.writeUInt8(gender, 0);
-
-    // Age: uint8
-    const ageBuffer = Buffer.alloc(1);
-    ageBuffer.writeUInt8(age, 0);
-
     return {
-        weight: weightBuffer.toString('base64'),
-        height: heightBuffer.toString('base64'),
-        gender: genderBuffer.toString('base64'),
-        age: ageBuffer.toString('base64'),
+        bmi: encodeBMI(bmi),
+        dataMode: encodeUInt8(dataMode),
+        stepEnable: encodeUInt8(stepEnable),
+        mlEnable: encodeUInt8(mlEnable),
     };
 }

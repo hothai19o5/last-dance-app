@@ -1,25 +1,39 @@
 // BLE Service - Real Implementation using react-native-ble-plx
+// Binary Protocol based on Last Dance Project Specification
 import { Buffer } from 'buffer';
 import { PermissionsAndroid, Platform } from 'react-native';
 import { BleManager, State } from 'react-native-ble-plx';
 import { BLEBatchData, BLEConfig, BLEDevice, BLEHealthData } from '../types';
-import { encodeUserProfile, parseBatchData, parseHealthDataJSON } from '../utils/bleDebug';
+import {
+  encodeTimeSync,
+  encodeUserProfile,
+  parseHealthDataNotification,
+  STANDARD_CHARACTERISTICS,
+  STANDARD_SERVICES
+} from '../utils/bleDebug';
 
 const bleManager = new BleManager();
 
-// BLE Service UUIDs (matching ESP32 device)
-const USER_PROFILE_SERVICE_UUID = '0000181C-0000-1000-8000-00805F9B34FB';
-const WEIGHT_CHAR_UUID = '00002A98-0000-1000-8000-00805F9B34FB';
-const HEIGHT_CHAR_UUID = '00002A8E-0000-1000-8000-00805F9B34FB';
-const GENDER_CHAR_UUID = '00002A8C-0000-1000-8000-00805F9B34FB';
-const AGE_CHAR_UUID = '00002A80-0000-1000-8000-00805F9B34FB';
+// Service UUIDs (matching Last Dance device)
+const USER_PROFILE_SERVICE_UUID = STANDARD_SERVICES.USER_PROFILE;
+const HEALTH_DATA_SERVICE_UUID = STANDARD_SERVICES.HEALTH_DATA;
+const BATTERY_SERVICE_UUID = STANDARD_SERVICES.BATTERY;
 
-const HEALTH_DATA_SERVICE_UUID = '0000180D-0000-1000-8000-00805F9B34FB';
-const HEALTH_DATA_BATCH_CHAR_UUID = '00002A37-0000-1000-8000-00805F9B34FB';
+// User Profile Service Characteristics
+const TIME_SYNC_CHAR_UUID = STANDARD_CHARACTERISTICS.TIME_SYNC;
+const DATA_MODE_CHAR_UUID = STANDARD_CHARACTERISTICS.DATA_MODE;
+const BMI_CHAR_UUID = STANDARD_CHARACTERISTICS.BMI;
+const STEP_ENABLE_CHAR_UUID = STANDARD_CHARACTERISTICS.STEP_ENABLE;
+const ML_ENABLE_CHAR_UUID = STANDARD_CHARACTERISTICS.ML_ENABLE;
 
-// Battery Service (separate from Health Data Service)
-const BATTERY_SERVICE_UUID = '0000180F-0000-1000-8000-00805F9B34FB';
-const BATTERY_LEVEL_CHAR_UUID = '00002A19-0000-1000-8000-00805F9B34FB';
+// Health Data Service Characteristics
+const HEALTH_DATA_CHAR_UUID = STANDARD_CHARACTERISTICS.HEALTH_DATA;
+
+// Battery Service Characteristics
+const BATTERY_LEVEL_CHAR_UUID = STANDARD_CHARACTERISTICS.BATTERY_LEVEL;
+
+// MTU size requirement
+const REQUIRED_MTU = 512;
 
 // Callback types for data received
 export type OnHealthDataCallback = (data: BLEHealthData) => void;
@@ -127,10 +141,62 @@ export class BLEService {
     try {
       const device = await bleManager.connectToDevice(deviceId);
       await device.discoverAllServicesAndCharacteristics();
+
+      // CRITICAL: Request MTU 512 bytes (required for batch data)
+      if (Platform.OS === 'android') {
+        try {
+          const mtu = await device.requestMTU(REQUIRED_MTU);
+          console.log(`[BLE] ✅ MTU set to: ${mtu} bytes`);
+        } catch (error) {
+          console.warn('[BLE] ⚠️ MTU request failed (may use default):', error);
+        }
+      } else {
+        console.log('[BLE] iOS: MTU is automatically managed');
+      }
+
+      // CRITICAL: Perform Time Sync immediately after connection
+      console.log('[BLE] 🕐 Performing mandatory Time Sync...');
+      const timeSyncSuccess = await this.syncTime(deviceId);
+      if (!timeSyncSuccess) {
+        console.error('[BLE] ❌ Time sync failed! Timestamps will be incorrect.');
+        // Don't fail connection, but warn user
+      } else {
+        console.log('[BLE] ✅ Time sync successful');
+      }
+
       console.log('[BLE] Connected successfully to:', deviceId);
       return true;
     } catch (error) {
       console.error('[BLE] Connection error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Sync time with device (MANDATORY before receiving data)
+   * Write current Unix timestamp to Time Sync characteristic
+   */
+  static async syncTime(deviceId: string, timestamp?: number | Date): Promise<boolean> {
+    console.log('[BLE] Syncing time with device...');
+
+    try {
+      const encodedTime = encodeTimeSync(timestamp);
+
+      await bleManager.writeCharacteristicWithResponseForDevice(
+        deviceId,
+        USER_PROFILE_SERVICE_UUID,
+        TIME_SYNC_CHAR_UUID,
+        encodedTime
+      );
+
+      const unixTime = timestamp
+        ? (timestamp instanceof Date ? Math.floor(timestamp.getTime() / 1000) : timestamp)
+        : Math.floor(Date.now() / 1000);
+
+      console.log('[BLE] ✅ Time synced:', new Date(unixTime * 1000).toISOString());
+      return true;
+    } catch (error) {
+      console.error('[BLE] ❌ Time sync error:', error);
       return false;
     }
   }
@@ -162,48 +228,48 @@ export class BLEService {
     try {
       // Encode user profile data using helper function
       const encoded = encodeUserProfile(
-        config.height,
-        config.weight,
-        config.age,
-        config.gender
+        config.bmi,
+        config.dataMode,
+        config.stepEnable,
+        config.mlEnable
       );
 
-      // Write Weight
+      // Write BMI
       await bleManager.writeCharacteristicWithResponseForDevice(
         deviceId,
         USER_PROFILE_SERVICE_UUID,
-        WEIGHT_CHAR_UUID,
-        encoded.weight
+        BMI_CHAR_UUID,
+        encoded.bmi
       );
 
-      // Write Height
+      // Write Data Mode (0: Realtime, 1: Batch)
       await bleManager.writeCharacteristicWithResponseForDevice(
         deviceId,
         USER_PROFILE_SERVICE_UUID,
-        HEIGHT_CHAR_UUID,
-        encoded.height
+        DATA_MODE_CHAR_UUID,
+        encoded.dataMode
       );
 
-      // Write Gender
+      // Write Step Enable
       await bleManager.writeCharacteristicWithResponseForDevice(
         deviceId,
         USER_PROFILE_SERVICE_UUID,
-        GENDER_CHAR_UUID,
-        encoded.gender
+        STEP_ENABLE_CHAR_UUID,
+        encoded.stepEnable
       );
 
-      // Write Age
+      // Write ML Enable
       await bleManager.writeCharacteristicWithResponseForDevice(
         deviceId,
         USER_PROFILE_SERVICE_UUID,
-        AGE_CHAR_UUID,
-        encoded.age
+        ML_ENABLE_CHAR_UUID,
+        encoded.mlEnable
       );
 
-      console.log('[BLE] Config written successfully');
+      console.log('[BLE] ✅ Config written successfully');
       return true;
     } catch (error) {
-      console.error('[BLE] Write config error:', error);
+      console.error('[BLE] ❌ Write config error:', error);
       return false;
     }
   }
@@ -212,37 +278,35 @@ export class BLEService {
     console.log('[BLE] Syncing data from device:', deviceId);
 
     try {
-      // Read Health Data Batch (JSON format from ESP32)
+      // Read Health Data (Binary format)
       const characteristic = await bleManager.readCharacteristicForDevice(
         deviceId,
         HEALTH_DATA_SERVICE_UUID,
-        HEALTH_DATA_BATCH_CHAR_UUID
+        HEALTH_DATA_CHAR_UUID
       );
 
       if (characteristic.value) {
-        // Use helper function to parse health data
-        const parsedData = parseHealthDataJSON(characteristic.value);
+        // Use helper function to parse binary health data
+        const parsed = parseHealthDataNotification(characteristic.value);
 
-        if (parsedData) {
-          console.log('[BLE] Synced data:', parsedData);
-          return {
-            ...parsedData,
-            timestamp: new Date().toISOString(),
-          };
+        if (parsed) {
+          if (parsed.type === 'batch') {
+            console.log('[BLE] Synced batch data:', (parsed.data as BLEBatchData).count, 'packets');
+            // Return the first packet for display
+            const batchData = parsed.data as BLEBatchData;
+            if (batchData.packets.length > 0) {
+              return batchData.packets[0];
+            }
+          } else {
+            console.log('[BLE] Synced single data:', parsed.data);
+            return parsed.data;
+          }
         }
       }
       return null;
     } catch (error) {
       console.error('[BLE] Sync data error:', error);
-      // Return mock data if sync fails (for testing)
-      return {
-        heartRate: 64,
-        spo2: 98,
-        steps: 319,
-        calories: 6,
-        alertScore: null,
-        timestamp: new Date().toISOString(),
-      };
+      return null;
     }
   }
 
@@ -307,16 +371,13 @@ export class BLEService {
     }
   }
 
-  // Subscribe to health data notifications (handles both single readings and batch data)
+  // Subscribe to health data notifications (handles binary packets)
   static async subscribeToHealthData(
     deviceId: string,
     onDataReceived: OnHealthDataCallback,
     onBatchReceived?: OnBatchDataCallback
   ): Promise<() => void> {
     console.log('[BLE] Subscribing to health data notifications...');
-
-    // Buffer for reassembling fragmented JSON packets
-    let jsonBuffer = '';
 
     try {
       // Check if device is already connected
@@ -333,29 +394,28 @@ export class BLEService {
         const devices = await bleManager.connectedDevices([HEALTH_DATA_SERVICE_UUID]);
         device = devices.find(d => d.id === deviceId);
         if (!device) {
-          // Fallback if not found in connected list (shouldn't happen if isDeviceConnected is true)
+          // Fallback if not found in connected list
           device = await bleManager.connectToDevice(deviceId);
         }
       }
 
-      // Always try to request larger MTU to minimize fragmentation
-      // Note: On Android, this negotiates. On iOS, it's automatic (and this call might be ignored or throw)
+      // Request MTU if not already done (Android only)
       if (Platform.OS === 'android') {
         try {
-          const mtu = await device.requestMTU(512);
+          const mtu = await device.requestMTU(REQUIRED_MTU);
           console.log(`[BLE] MTU set to: ${mtu} bytes`);
         } catch (error) {
-          console.log('[BLE] MTU request failed (okay if already set):', error);
+          console.log('[BLE] MTU request skipped (may already be set)');
         }
       }
 
       // Small delay to ensure characteristics are ready
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       const subscription = bleManager.monitorCharacteristicForDevice(
         deviceId,
         HEALTH_DATA_SERVICE_UUID,
-        HEALTH_DATA_BATCH_CHAR_UUID,
+        HEALTH_DATA_CHAR_UUID,
         (error, characteristic) => {
           if (error) {
             console.error('[BLE] Monitor error:', error);
@@ -363,67 +423,41 @@ export class BLEService {
           }
 
           if (characteristic?.value) {
-            const chunk = Buffer.from(characteristic.value, 'base64').toString('utf-8');
-            console.log(`[BLE] 📥 Received chunk (${chunk.length} chars):`, chunk.substring(0, 50) + (chunk.length > 50 ? '...' : ''));
+            // Parse binary data (10, 14, or N*10 bytes)
+            const parsed = parseHealthDataNotification(characteristic.value);
 
-            // Heuristic: If a new JSON object starts and we have leftover garbage, clear it
-            if (chunk.trim().startsWith('{') && jsonBuffer.length > 0) {
-              // Only clear if the buffer doesn't look like it's waiting for this chunk
-              // (Simple check: if buffer ends with ',' or '[' or ':' it might be expecting more. 
-              // But if buffer is just garbage or we missed a packet, this helps recover.)
-              // For safety, let's just log warning. 
-              // If the previous JSON was incomplete, appending '{' will likely cause a parse error anyway,
-              // but clearing it ensures we start fresh for the new message.
-              console.warn('[BLE] ⚠️ New message start detected while buffer not empty. Resetting buffer.');
-              jsonBuffer = '';
+            if (!parsed) {
+              console.warn('[BLE] Failed to parse notification');
+              return;
             }
 
-            jsonBuffer += chunk;
+            // Handle different packet types
+            if (parsed.type === 'single' || parsed.type === 'alert') {
+              // Single packet or alert
+              const healthData = parsed.data as BLEHealthData;
+              console.log('[BLE] ❤️ Received health data:', healthData);
+              onDataReceived(healthData);
+            } else if (parsed.type === 'batch') {
+              // Batch data (multiple packets)
+              const batchData = parsed.data as BLEBatchData;
+              console.log('[BLE] 📊 Received batch data:', batchData.count, 'packets');
 
-            try {
-              // Try to parse the accumulated buffer
-              // If jsonBuffer is incomplete, JSON.parse will throw
-              const jsonData = JSON.parse(jsonBuffer);
-              console.log('[BLE] ✅ Parsed JSON success');
-
-              // Check if this is batch data or single reading/alert
-              if (jsonData.type === 'batch') {
-                // Batch data (5-minute data)
-                const batchData = parseBatchData(jsonData);
-                if (batchData && onBatchReceived) {
-                  console.log('[BLE] 📊 Received batch data:', batchData.count, 'samples');
-                  onBatchReceived(batchData);
-                }
+              if (onBatchReceived) {
+                onBatchReceived(batchData);
               } else {
-                // Single reading or alert
-                const healthData: BLEHealthData = {
-                  heartRate: jsonData.hr || 0,
-                  spo2: jsonData.spo2 || 0,
-                  steps: jsonData.steps || 0,
-                  alertScore: jsonData.alert !== undefined ? jsonData.alert : null,
-                  timestamp: new Date().toISOString(),
-                };
-                console.log('[BLE] ❤️ Received health data:', healthData);
-                onDataReceived(healthData);
+                // If no batch handler, send each packet individually
+                batchData.packets.forEach(packet => onDataReceived(packet));
               }
-
-              // Clear buffer after successful parse
-              jsonBuffer = '';
-
-            } catch (parseError) {
-              // JSON is incomplete, wait for next chunk
-              console.log(`[BLE] ⏳ Buffering... (${jsonBuffer.length} chars)`);
             }
           }
         }
       );
 
-      console.log('[BLE] Successfully subscribed to health data');
+      console.log('[BLE] ✅ Successfully subscribed to health data');
 
       // Return unsubscribe function
       return () => {
         subscription.remove();
-        jsonBuffer = '';
         console.log('[BLE] Unsubscribed from health data');
       };
     } catch (error) {
