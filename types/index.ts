@@ -62,13 +62,19 @@ export interface WatchFace {
 
 // Types for User Profile
 export interface UserProfile {
-    id: string;
-    name: string;
-    gender: 'Male' | 'Female' | 'Other';
-    height: number; // cm
-    age: number;
-    weight?: number; // kg
-    avatar?: string;
+    id?: number;
+    username?: string;
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    gender?: 'MALE' | 'FEMALE';
+    heightM?: number;
+    age?: number;
+    weightKg?: number;
+    profilePictureUrl?: string;
+    bmi?: number;
+    enable?: boolean;
+    dob?: string;
 }
 
 // BLE Types

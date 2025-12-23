@@ -21,7 +21,7 @@ export const healthHistoryService = {
             // Add new data points
             history.heartRate.push(data.heartRate);
             history.spo2.push(data.spo2);
-            history.timestamps.push(data.timestamp);
+            history.timestamps.push(data.timestampISO);
 
             // Keep only last MAX_HISTORY_POINTS
             if (history.heartRate.length > MAX_HISTORY_POINTS) {

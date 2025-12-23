@@ -118,21 +118,20 @@ export default function ProfileScreen() {
             {/* User Info Card */}
             <TouchableOpacity style={[styles.userCard]} onPress={handleEditProfile}>
                 <View style={[styles.userAvatar, { backgroundColor: colors.cardBackground }]}>
-                    {profile?.avatar ? (
-                        <Image source={{ uri: profile.avatar }} style={styles.avatarImage} />
+                    {profile?.profilePictureUrl ? (
+                        <Image source={{ uri: profile.profilePictureUrl }} style={styles.avatarImage} />
                     ) : (
                         <Ionicons name="person" size={40} color={colors.textSecondary} />
                     )}
                 </View>
                 <View style={styles.userInfo}>
                     <Text style={[styles.userId, { color: colors.text }]}>
-                        {profile?.name || 'Guest User'}
+                        {profile?.firstName + ' ' + profile?.lastName || 'Guest User'}
                     </Text>
                     <Text style={[styles.userDetails, { color: colors.textSecondary }]}>
-                        {profile ? `${profile.gender}   ${profile.height} cm   ${profile.age}` : 'Tap to set up profile'}
+                        {profile ? `${profile.gender}   ${profile.heightM} cm   ${profile.age}` : 'Tap to set up profile'}
                     </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={20} color={colors.placeholder} />
             </TouchableOpacity>
 
             {/* Competition Card */}
@@ -295,7 +294,6 @@ const SettingItem: React.FC<SettingItemProps> = ({ icon, iconColor, title, subti
                 {subtitle && <Text style={[styles.settingSubtitle, { color: colors.textSecondary }]}>{subtitle}</Text>}
             </View>
         </View>
-        <Ionicons name="chevron-forward" size={20} color={colors.placeholder} />
     </TouchableOpacity>
 );
 

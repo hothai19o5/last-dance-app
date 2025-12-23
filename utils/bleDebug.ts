@@ -24,13 +24,13 @@ export async function debugDeviceServices(deviceId: string): Promise<void> {
         const services = await device.services();
 
         for (const service of services) {
-            console.log('\n📦 Service:', service.uuid);
+            console.log('\nService:', service.uuid);
             console.log('  - Is Primary:', service.isPrimary);
 
             const characteristics = await service.characteristics();
 
             for (const char of characteristics) {
-                console.log('  📝 Characteristic:', char.uuid);
+                console.log('  Characteristic:', char.uuid);
                 console.log('    - Can Read:', char.isReadable);
                 console.log('    - Can Write:', char.isWritableWithResponse || char.isWritableWithoutResponse);
                 console.log('    - Can Notify:', char.isNotifiable);
@@ -79,7 +79,7 @@ export function monitorCharacteristic(
 
             if (characteristic?.value) {
                 const data = Buffer.from(characteristic.value, 'base64').toString('utf-8');
-                console.log('📡 Received data:', data);
+                console.log('Received data:', data);
                 onData(data);
             }
         }
@@ -190,7 +190,7 @@ export function parseHealthDataNotification(base64Value: string): {
                 alertScore: null,
                 timestampISO: new Date(packet.timestamp * 1000).toISOString(),
             };
-            console.log('[BLE] ❤️ Parsed single packet:', healthData);
+            console.log('[BLE] Parsed single packet:', healthData);
             return { type: 'single', data: healthData };
         }
 
@@ -204,7 +204,7 @@ export function parseHealthDataNotification(base64Value: string): {
                 alertScore,
                 timestampISO: new Date(packet.timestamp * 1000).toISOString(),
             };
-            console.log('[BLE] 🚨 Parsed alert packet:', healthData);
+            console.log('[BLE] Parsed alert packet:', healthData);
             return { type: 'alert', data: healthData };
         }
 
@@ -230,7 +230,7 @@ export function parseHealthDataNotification(base64Value: string): {
                 count,
             };
 
-            console.log('[BLE] 📊 Parsed batch data:', count, 'packets');
+            console.log('[BLE] Parsed batch data:', count, 'packets');
             return { type: 'batch', data: batchData };
         }
 

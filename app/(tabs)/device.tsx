@@ -12,7 +12,7 @@ export default function DeviceScreen() {
     const colors = useThemeColors();
     const router = useRouter();
     const { themeTransition } = useTheme();
-    const { device, syncDeviceData, disconnectDevice, pendingSyncCount, forceSyncToServer, isConnected, reconnectToDevice, getDeviceHistory } = useDevice();
+    const { device, syncDeviceData, disconnectDevice, pendingSyncCount, forceSyncToServer, isConnected, reconnectToDevice, getDeviceHistory, removeDevice } = useDevice();
     const [syncing, setSyncing] = useState(false);
     const [showAddMenu, setShowAddMenu] = useState(false);
     const [deviceHistory, setDeviceHistory] = useState<WearableDevice[]>([]);
@@ -75,10 +75,10 @@ export default function DeviceScreen() {
         router.push('/scan-devices');
     };
 
-    const handleWatchFaceSelect = (device: WearableDevice) => {
+    const handleWatchFaceSelect = (selectedDevice: WearableDevice) => {
         Alert.alert(
             'Connect to Device',
-            `Do you want to connect to ${device.name}?`,
+            `Do you want to connect to ${selectedDevice.name}?`,
             [
                 {
                     text: 'Cancel',
@@ -87,12 +87,38 @@ export default function DeviceScreen() {
                 {
                     text: 'Connect',
                     onPress: async () => {
-                        const success = await reconnectToDevice(device.id);
+                        const success = await reconnectToDevice(selectedDevice.id);
                         if (success) {
-                            deviceToasts.connected(device.name);
+                            deviceToasts.connected(selectedDevice.name);
                             await loadDeviceHistory();
                         } else {
-                            deviceToasts.connectionFailed(device.name);
+                            deviceToasts.connectionFailed(selectedDevice.name);
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
+    const handleDeleteDevice = (targetDevice: WearableDevice) => {
+        Alert.alert(
+            'Delete Device',
+            `Are you sure you want to remove "${targetDevice.name}" from your devices? This action cannot be undone.`,
+            [
+                {
+                    text: 'Cancel',
+                    style: 'cancel',
+                },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        const success = await removeDevice(targetDevice.id);
+                        if (success) {
+                            showToast.success('Device removed successfully');
+                            await loadDeviceHistory();
+                        } else {
+                            showToast.error('Failed to remove device');
                         }
                     },
                 },
@@ -282,6 +308,8 @@ export default function DeviceScreen() {
                                 key={savedDevice.id}
                                 style={[styles.watchFaceCard, { backgroundColor: colors.cardBackground }]}
                                 onPress={() => handleWatchFaceSelect(savedDevice)}
+                                onLongPress={() => handleDeleteDevice(savedDevice)}
+                                delayLongPress={500}
                             >
                                 <View style={[styles.watchFaceImage, { backgroundColor: colors.divider }]}>
                                     {savedDevice.image ? (

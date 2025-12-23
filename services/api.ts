@@ -1,5 +1,6 @@
 // API Service - Central API client with JWT authentication
 import { authService } from "./authService";
+import { userProfileService } from "./userProfileService";
 
 // API Base URL - Update this to your actual server URL
 const API_BASE_URL = 'https://hoxuanthai.id.vn/api/v1';
@@ -9,6 +10,9 @@ export const API_ENDPOINTS = {
     // Auth
     LOGIN: '/login',
     REGISTER: '/register',
+
+    // User
+    USER_DETAIL: '/user/me',
 
     // Health Data
     HEALTH_DATA: '/sync/health-data',
@@ -25,7 +29,8 @@ export interface ApiResponse<T> {
 
 // Request/Response Types
 export interface RegistrationRequest {
-    name: string;
+    firstName: string;
+    lastName: string;
     email: string;
     username: string;
     password: string;
@@ -61,6 +66,22 @@ export interface DeviceRegistrationRequest {
     deviceUuid: string;
     deviceName: string;
     username: string;
+}
+
+export interface UserDetailResponse {
+    id?: number;
+    username?: string;
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    gender?: 'MALE' | 'FEMALE';
+    heightM?: number;
+    age?: number;
+    weightKg?: number;
+    profilePictureUrl?: string;
+    bmi?: number;
+    enable?: boolean;
+    dob?: string;
 }
 
 export interface ApiError {
@@ -238,9 +259,9 @@ class ApiService {
     /**
      * Register new user
      */
-    async register(data: RegistrationRequest): Promise<RegistrationResponse> {
+    async register(data: RegistrationRequest): Promise<ApiResponse<RegistrationResponse>> {
         console.log('[API] Registering user:', data.username);
-        return this.post<RegistrationRequest, RegistrationResponse>(
+        return this.post<RegistrationRequest, ApiResponse<RegistrationResponse>>(
             API_ENDPOINTS.REGISTER,
             data,
             false // No auth required for registration
@@ -279,14 +300,20 @@ class ApiService {
         return response;
     }
 
-    // ==================== Health Data APIs ====================
+    /**
+     * Get current user details
+     * @returns User detail response
+     */
+    async getUserDetail(): Promise<ApiResponse<UserDetailResponse>> {
+        return this.get<ApiResponse<UserDetailResponse>>(API_ENDPOINTS.USER_DETAIL, true);
+    }
 
     /**
      * Send health data to server
      */
-    async sendHealthData(data: HealthDataDto): Promise<{ message: string }> {
+    async sendHealthData(data: HealthDataDto): Promise<ApiResponse<{ message: string }>> {
         console.log('[API] Sending health data:', data.dataPoints.length, 'points');
-        return this.post<HealthDataDto, { message: string }>(
+        return this.post<HealthDataDto, ApiResponse<{ message: string }>>(
             API_ENDPOINTS.HEALTH_DATA,
             data,
             true // Requires authentication
@@ -296,11 +323,22 @@ class ApiService {
     /**
      * Register a device with the backend for the current user
      */
-    async registerDevice(data: DeviceRegistrationRequest): Promise<{ message?: string }> {
+    async registerDevice(data: DeviceRegistrationRequest): Promise<ApiResponse<{ message?: string }>> {
         console.log('[API] Registering device on server:', data.deviceUuid);
-        return this.post<DeviceRegistrationRequest, { message?: string }>(
+        return this.post<DeviceRegistrationRequest, ApiResponse<{ message?: string }>>(
             API_ENDPOINTS.DEVICE,
             data,
+            true // Requires authentication
+        );
+    }
+
+    /**
+     * Delete/unlink a device from the current user
+     */
+    async deleteDevice(deviceUuid: string): Promise<ApiResponse<{ message?: string }>> {
+        console.log('[API] Deleting device from server:', deviceUuid);
+        return this.delete<ApiResponse<{ message?: string }>>(
+            `${API_ENDPOINTS.DEVICE}/${deviceUuid}`,
             true // Requires authentication
         );
     }

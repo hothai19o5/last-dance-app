@@ -49,19 +49,19 @@ export default function HealthScreen() {
         setSpO2ChartData(spo2Data);
 
         // For weight, we'll show last 12 weight entries (if available, otherwise just current)
-        if (userProfile?.weight && history.heartRate.length > 0) {
+        if (userProfile?.weightKg && history.heartRate.length > 0) {
             // Simulate weight history based on number of health data points
             const weightArray = Array(12).fill(0);
             const dataPoints = Math.min(history.heartRate.length, 12);
             const startIdx = 12 - dataPoints;
             for (let i = 0; i < dataPoints; i++) {
-                weightArray[startIdx + i] = userProfile.weight;
+                weightArray[startIdx + i] = userProfile.weightKg;
             }
             setWeightHistory(weightArray);
-        } else if (userProfile?.weight) {
+        } else if (userProfile?.weightKg) {
             // Only current weight available
             const weightArray = Array(12).fill(0);
-            weightArray[11] = userProfile.weight;
+            weightArray[11] = userProfile.weightKg;
             setWeightHistory(weightArray);
         } else {
             setWeightHistory(Array(12).fill(0));
@@ -71,7 +71,7 @@ export default function HealthScreen() {
     // Reload chart data when health data changes
     useEffect(() => {
         loadChartData();
-    }, [healthData, userProfile?.weight]);
+    }, [healthData, userProfile?.weightKg]);
 
     // Health goals
     const caloriesGoal = 200;
@@ -84,7 +84,7 @@ export default function HealthScreen() {
     const currentSteps = healthData?.steps || 0;
     const currentCalories = 0;
     const alertScore = healthData?.alertScore;
-    const userWeight = userProfile?.weight || null;
+    const userWeight = userProfile?.weightKg || null;
 
     // Show alert toast when alertScore is present and >= 0.5
     useEffect(() => {
@@ -94,7 +94,7 @@ export default function HealthScreen() {
                 const isEnabled = await notificationSettingsService.isAlertNotificationsEnabled();
                 if (isEnabled) {
                     showToast.error(
-                        '⚠️ Abnormal Vitals Detected',
+                        'Abnormal Vitals Detected',
                         `Alert Score: ${(alertScore * 100).toFixed(0)}% • HR: ${heartRate} bpm • SpO₂: ${spo2}%`
                     );
                 }

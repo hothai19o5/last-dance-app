@@ -1,5 +1,6 @@
 // Device Context - Quản lý thiết bị và health data
 import React, { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
+import { apiService } from '../services/api';
 import { BLEService } from '../services/bleService';
 import { dataSyncService } from '../services/dataSync';
 import { DeviceStorage } from '../services/deviceStorage';
@@ -21,6 +22,7 @@ interface DeviceContextType {
     reconnectToDevice: (deviceId: string) => Promise<boolean>;
     getDeviceHistory: () => Promise<WearableDevice[]>;
     sendUserProfileToDevice: (deviceId: string) => Promise<boolean>;
+    removeDevice: (deviceId: string) => Promise<boolean>;
 }
 
 const DeviceContext = createContext<DeviceContextType | undefined>(undefined);
@@ -305,6 +307,38 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
 
     /**
+     * Xoá device khỏi app và server
+     */
+    const removeDevice = async (deviceId: string): Promise<boolean> => {
+        try {
+            console.log('[DeviceContext] Removing device:', deviceId);
+
+            // If this is the current connected device, disconnect first
+            if (device?.id === deviceId) {
+                await disconnectDevice();
+            }
+
+            // Remove from server
+            try {
+                await apiService.deleteDevice(deviceId);
+                console.log('[DeviceContext] Device removed from server');
+            } catch (serverError) {
+                console.warn('[DeviceContext] Failed to remove device from server:', serverError);
+                // Continue to remove locally even if server fails
+            }
+
+            // Remove from local history
+            await DeviceStorage.removeFromDeviceHistory(deviceId);
+            console.log('[DeviceContext] Device removed from local history');
+
+            return true;
+        } catch (error) {
+            console.error('[DeviceContext] Failed to remove device:', error);
+            return false;
+        }
+    };
+
+    /**
      * Gửi thông tin user profile xuống thiết bị IoT sau khi kết nối BLE
      */
     const sendUserProfileToDevice = async (deviceId: string): Promise<boolean> => {
@@ -364,6 +398,7 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                 reconnectToDevice,
                 getDeviceHistory,
                 sendUserProfileToDevice,
+                removeDevice,
             }}
         >
             {children}

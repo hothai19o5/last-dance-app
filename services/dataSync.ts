@@ -69,7 +69,7 @@ class DataSyncService {
         // Check if user is authenticated before syncing
         const isAuthenticated = await apiService.isAuthenticated();
         if (!isAuthenticated) {
-            console.warn('[DataSync] ⚠️ User not authenticated, skipping sync');
+            console.warn('[DataSync] User not authenticated, skipping sync');
             return false;
         }
 
@@ -92,16 +92,16 @@ class DataSyncService {
 
         try {
             const result = await apiService.sendHealthData(healthDataDto);
-            console.log('[DataSync] ✅ Sync successful! Server response:', result);
+            console.log('[DataSync] Sync successful! Server response:', result);
 
             // Clear buffer after successful sync
             this.dataBuffer = [];
             return true;
         } catch (error: any) {
-            console.error('[DataSync] ❌ Sync error:', error);
+            console.error('[DataSync] Sync error:', error);
             // If unauthorized, user needs to login again
             if (error.status === 401) {
-                console.error('[DataSync] 🔒 Unauthorized - Token may be invalid or expired. Please login again');
+                console.error('[DataSync] Unauthorized - Token may be invalid or expired. Please login again');
             }
             return false;
         }

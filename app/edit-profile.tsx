@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
@@ -19,12 +20,17 @@ export default function EditProfileScreen() {
     const [loading, setLoading] = useState(false);
 
     // Form state
-    const [name, setName] = useState('');
-    const [gender, setGender] = useState<'Male' | 'Female' | 'Other'>('Male');
-    const [height, setHeight] = useState('');
+    const [username, setUsername] = useState('');
+    const [firstName, setFirstName] = useState('');
+    const [lastName, setLastName] = useState('');
+    const [gender, setGender] = useState<'MALE' | 'FEMALE'>('MALE');
+    const [email, setEmail] = useState('');
+    const [heightM, setHeightM] = useState('');
     const [age, setAge] = useState('');
-    const [weight, setWeight] = useState('');
-    const [avatarUri, setAvatarUri] = useState<string | undefined>(undefined);
+    const [weightKg, setWeightKg] = useState('');
+    const [profilePictureUrl, setProfilePictureUrl] = useState<string | undefined>(undefined);
+    const [dateOfBirth, setDateOfBirth] = useState<Date | undefined>(undefined);
+    const [openDatePicker, setOpenDatePicker] = useState(false);
 
     // Load existing profile on mount
     React.useEffect(() => {
@@ -35,12 +41,18 @@ export default function EditProfileScreen() {
         try {
             const profile = await userProfileService.getProfile();
             if (profile) {
-                setName(profile.name || '');
-                setGender(profile.gender || 'Male');
-                setHeight(profile.height?.toString() || '');
+                setUsername(profile.username || '');
+                setFirstName(profile.firstName || '');
+                setLastName(profile.lastName || '');
+                setGender(profile.gender || 'MALE');
+                setHeightM(profile.heightM?.toString() || '');
                 setAge(profile.age?.toString() || '');
-                setWeight(profile.weight?.toString() || '');
-                setAvatarUri(profile.avatar);
+                setWeightKg(profile.weightKg?.toString() || '');
+                setProfilePictureUrl(profile.profilePictureUrl);
+                setEmail(profile.email || '');
+                if (profile.dob) {
+                    setDateOfBirth(new Date(profile.dob));
+                }
             }
         } catch (error) {
             console.error('[EditProfile] Error loading profile:', error);
@@ -70,7 +82,7 @@ export default function EditProfileScreen() {
 
             if (!result.canceled && result.assets[0]) {
                 const imageUri = result.assets[0].uri;
-                setAvatarUri(imageUri);
+                setProfilePictureUrl(imageUri);
                 showToast.success('Avatar selected', 'Tap Save to confirm');
             }
         } catch (error) {
@@ -101,7 +113,7 @@ export default function EditProfileScreen() {
 
             if (!result.canceled && result.assets[0]) {
                 const imageUri = result.assets[0].uri;
-                setAvatarUri(imageUri);
+                setProfilePictureUrl(imageUri);
                 showToast.success('Photo taken', 'Tap Save to confirm');
             }
         } catch (error) {
@@ -123,10 +135,10 @@ export default function EditProfileScreen() {
                     text: 'Choose from Library',
                     onPress: pickImage,
                 },
-                avatarUri && {
+                profilePictureUrl && {
                     text: 'Remove Avatar',
                     style: 'destructive',
-                    onPress: () => setAvatarUri(undefined),
+                    onPress: () => setProfilePictureUrl(undefined),
                 },
                 {
                     text: 'Cancel',
@@ -137,22 +149,22 @@ export default function EditProfileScreen() {
     };
 
     const validateForm = (): boolean => {
-        if (!name.trim()) {
-            showToast.error('Validation Error', 'Please enter your name');
+        if (!firstName.trim()) {
+            showToast.error('Validation Error', 'Please enter your first name');
             return false;
         }
 
-        if (!height || isNaN(Number(height)) || Number(height) <= 0) {
+        if (!lastName.trim()) {
+            showToast.error('Validation Error', 'Please enter your last name');
+            return false;
+        }
+
+        if (!heightM || isNaN(Number(heightM)) || Number(heightM) <= 0) {
             showToast.error('Validation Error', 'Please enter a valid height in cm');
             return false;
         }
 
-        if (!age || isNaN(Number(age)) || Number(age) <= 0 || Number(age) > 150) {
-            showToast.error('Validation Error', 'Please enter a valid age');
-            return false;
-        }
-
-        if (weight && (isNaN(Number(weight)) || Number(weight) <= 0)) {
+        if (weightKg && (isNaN(Number(weightKg)) || Number(weightKg) <= 0)) {
             showToast.error('Validation Error', 'Please enter a valid weight in kg');
             return false;
         }
@@ -168,19 +180,23 @@ export default function EditProfileScreen() {
         setLoading(true);
         try {
             // Save avatar if changed
-            let finalAvatarUri = avatarUri;
-            if (avatarUri) {
-                finalAvatarUri = await userProfileService.saveAvatar(avatarUri);
+            let finalAvatarUri = profilePictureUrl;
+            if (profilePictureUrl) {
+                finalAvatarUri = await userProfileService.saveAvatar(profilePictureUrl);
             }
 
             // Save profile
             const profileData: Partial<UserProfile> = {
-                name: name.trim(),
+                firstName: firstName.trim(),
+                lastName: lastName.trim(),
                 gender,
-                height: Number(height),
-                age: Number(age),
-                weight: weight ? Number(weight) : undefined,
-                avatar: finalAvatarUri,
+                heightM: Number(heightM),
+                weightKg: weightKg ? Number(weightKg) : undefined,
+                email: email.trim(),
+                dob: dateOfBirth ? dateOfBirth.toISOString().split('T')[0] : undefined,
+                profilePictureUrl: finalAvatarUri,
+                username: username.trim(),
+                age: age ? Number(age) : undefined,
             };
 
             await userProfileService.saveProfile(profileData);
@@ -229,8 +245,8 @@ export default function EditProfileScreen() {
                         style={[styles.avatarContainer, { backgroundColor: colors.cardBackground }]}
                         onPress={showAvatarOptions}
                     >
-                        {avatarUri ? (
-                            <Image source={{ uri: avatarUri }} style={styles.avatar} />
+                        {profilePictureUrl ? (
+                            <Image source={{ uri: profilePictureUrl }} style={styles.avatar} />
                         ) : (
                             <Ionicons name="person" size={60} color={colors.textSecondary} />
                         )}
@@ -245,13 +261,39 @@ export default function EditProfileScreen() {
 
                 {/* Form Fields */}
                 <View style={[styles.formSection, { backgroundColor: colors.cardBackground }]}>
+
+                    <View style={[styles.formField, { borderBottomColor: colors.divider }]}>
+                        <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Username</Text>
+                        <Text style={[styles.fieldInput, { color: colors.text }]}>
+                            {username || 'Not set'}
+                        </Text>
+                    </View>
+
+                    <View style={[styles.formField, { borderBottomColor: colors.divider }]}>
+                        <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Email</Text>
+                        <Text style={[styles.fieldInput, { color: colors.text }]}>
+                            {email || 'Not set'}
+                        </Text>
+                    </View>
+
                     <View style={[styles.formField, { borderBottomColor: colors.divider }]}>
                         <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Name</Text>
                         <TextInput
                             style={[styles.fieldInput, { color: colors.text }]}
-                            value={name}
-                            onChangeText={setName}
-                            placeholder="Enter your name"
+                            value={firstName}
+                            onChangeText={setFirstName}
+                            placeholder="Enter your first name"
+                            placeholderTextColor={colors.placeholder}
+                        />
+                    </View>
+
+                    <View style={[styles.formField, { borderBottomColor: colors.divider }]}>
+                        <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Name</Text>
+                        <TextInput
+                            style={[styles.fieldInput, { color: colors.text }]}
+                            value={lastName}
+                            onChangeText={setLastName}
+                            placeholder="Enter your last name"
                             placeholderTextColor={colors.placeholder}
                         />
                     </View>
@@ -259,7 +301,7 @@ export default function EditProfileScreen() {
                     <View style={[styles.formField, { borderBottomColor: colors.divider }]}>
                         <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Gender</Text>
                         <View style={styles.genderButtons}>
-                            {(['Male', 'Female', 'Other'] as const).map((g) => (
+                            {(['MALE', 'FEMALE'] as const).map((g) => (
                                 <TouchableOpacity
                                     key={g}
                                     style={[
@@ -282,44 +324,62 @@ export default function EditProfileScreen() {
                     </View>
 
                     <View style={[styles.formField, { borderBottomColor: colors.divider }]}>
-                        <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Height (cm)</Text>
+                        <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Height (m)</Text>
                         <TextInput
                             style={[styles.fieldInput, { color: colors.text }]}
-                            value={height}
-                            onChangeText={setHeight}
-                            placeholder="170"
+                            value={heightM}
+                            onChangeText={setHeightM}
+                            placeholder="1.70"
                             placeholderTextColor={colors.placeholder}
                             keyboardType="numeric"
                         />
                     </View>
 
                     <View style={[styles.formField, { borderBottomColor: colors.divider }]}>
-                        <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Age</Text>
+                        <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Weight (kg)</Text>
                         <TextInput
                             style={[styles.fieldInput, { color: colors.text }]}
-                            value={age}
-                            onChangeText={setAge}
-                            placeholder="25"
+                            value={weightKg}
+                            onChangeText={setWeightKg}
+                            placeholder="68"
                             placeholderTextColor={colors.placeholder}
                             keyboardType="numeric"
                         />
                     </View>
 
                     <View style={styles.formField}>
-                        <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Weight (kg)</Text>
-                        <TextInput
-                            style={[styles.fieldInput, { color: colors.text }]}
-                            value={weight}
-                            onChangeText={setWeight}
-                            placeholder="68 (optional)"
-                            placeholderTextColor={colors.placeholder}
-                            keyboardType="numeric"
-                        />
+                        <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Date of Birth</Text>
+                        <TouchableOpacity
+                            style={styles.datePickerButton}
+                            onPress={() => setOpenDatePicker(true)}
+                        >
+                            <Text style={[styles.fieldInput, { color: dateOfBirth ? colors.text : colors.placeholder }]}>
+                                {dateOfBirth ? dateOfBirth.toLocaleDateString() : 'Select date of birth'}
+                            </Text>
+                            <Ionicons name="calendar-outline" size={20} color={colors.textSecondary} />
+                        </TouchableOpacity>
                     </View>
+
                 </View>
 
                 <View style={styles.bottomSpacing} />
             </ScrollView>
+
+            {/* Date Picker Modal */}
+            {openDatePicker && (
+                <DateTimePicker
+                    value={dateOfBirth || new Date()}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={(event, selectedDate) => {
+                        setOpenDatePicker(Platform.OS === 'ios');
+                        if (selectedDate) {
+                            setDateOfBirth(selectedDate);
+                        }
+                    }}
+                    maximumDate={new Date()}
+                />
+            )}
         </KeyboardAvoidingView>
     );
 }
@@ -417,6 +477,12 @@ const styles = StyleSheet.create({
     genderButtonText: {
         fontSize: 14,
         fontWeight: '500',
+    },
+    datePickerButton: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 4,
     },
     bottomSpacing: {
         height: 40,

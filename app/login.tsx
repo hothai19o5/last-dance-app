@@ -15,6 +15,7 @@ import {
 import { useThemeColors } from '../contexts/ThemeContext';
 import { apiService, LoginRequest } from '../services/api';
 import { authService } from '../services/authService';
+import { userProfileService } from '../services/userProfileService';
 import { authToasts, showToast } from '../utils/toast';
 
 export default function LoginScreen() {
@@ -53,6 +54,32 @@ export default function LoginScreen() {
             });
 
             console.log('[Login] Login successful');
+
+            // Fetch user detail and save to profile
+            try {
+                const userDetailResponse = await apiService.getUserDetail();
+                if (userDetailResponse.data) {
+                    const userData = userDetailResponse.data;
+                    await userProfileService.saveProfile({
+                        id: userData.id,
+                        username: userData.username,
+                        email: userData.email || '',
+                        firstName: userData.firstName || '',
+                        lastName: userData.lastName || '',
+                        dob: userData.dob || '',
+                        gender: userData.gender || 'MALE',
+                        heightM: userData.heightM || 170,
+                        age: userData.age || 25,
+                        weightKg: userData.weightKg || 70,
+                        profilePictureUrl: userData.profilePictureUrl || '',
+                    });
+                    console.log('[Login] User profile saved');
+                }
+            } catch (profileError) {
+                console.warn('[Login] Could not fetch user detail:', profileError);
+                // Continue login flow even if profile fetch fails
+            }
+
             authToasts.loginSuccess();
 
             // Navigate to main app after a short delay to show toast

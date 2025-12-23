@@ -19,7 +19,8 @@ import { authToasts, showToast } from '../utils/toast';
 export default function RegisterScreen() {
     const router = useRouter();
     const colors = useThemeColors();
-    const [name, setName] = useState('');
+    const [firstName, setFirstName] = useState('');
+    const [lastName, setLastName] = useState('');
     const [email, setEmail] = useState('');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -35,8 +36,13 @@ export default function RegisterScreen() {
 
     const handleRegister = async () => {
         // Validate inputs
-        if (!name.trim()) {
-            showToast.error('Please enter your name');
+        if (!firstName.trim()) {
+            showToast.error('Please enter your first name');
+            return;
+        }
+
+        if (!lastName.trim()) {
+            showToast.error('Please enter your last name');
             return;
         }
 
@@ -79,7 +85,8 @@ export default function RegisterScreen() {
 
         try {
             const registrationData: RegistrationRequest = {
-                name: name.trim(),
+                firstName: firstName.trim(),
+                lastName: lastName.trim(),
                 email: email.trim(),
                 username: username.trim(),
                 password: password,
@@ -136,17 +143,34 @@ export default function RegisterScreen() {
 
                 {/* Registration Form */}
                 <View style={styles.form}>
-                    {/* Name Input */}
+                    {/* Firstname Input */}
                     <View style={styles.inputGroup}>
-                        <Text style={[styles.label, { color: colors.text }]}>Full Name</Text>
+                        <Text style={[styles.label, { color: colors.text }]}>First Name</Text>
                         <View style={[styles.inputContainer, { backgroundColor: colors.cardBackground, borderColor: colors.divider }]}>
                             <Ionicons name="person-outline" size={20} color={colors.placeholder} style={styles.inputIcon} />
                             <TextInput
                                 style={[styles.input, { color: colors.text }]}
-                                placeholder="Enter your full name"
+                                placeholder="Enter your first name"
                                 placeholderTextColor={colors.placeholder}
-                                value={name}
-                                onChangeText={setName}
+                                value={firstName}
+                                onChangeText={setFirstName}
+                                autoCapitalize="words"
+                                editable={!loading}
+                            />
+                        </View>
+                    </View>
+
+                    {/* Lastname Input */}
+                    <View style={styles.inputGroup}>
+                        <Text style={[styles.label, { color: colors.text }]}>Last Name</Text>
+                        <View style={[styles.inputContainer, { backgroundColor: colors.cardBackground, borderColor: colors.divider }]}>
+                            <Ionicons name="person-outline" size={20} color={colors.placeholder} style={styles.inputIcon} />
+                            <TextInput
+                                style={[styles.input, { color: colors.text }]}
+                                placeholder="Enter your last name"
+                                placeholderTextColor={colors.placeholder}
+                                value={lastName}
+                                onChangeText={setLastName}
                                 autoCapitalize="words"
                                 editable={!loading}
                             />

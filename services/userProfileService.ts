@@ -58,7 +58,7 @@ export const userProfileService = {
             await AsyncStorage.setItem(USER_AVATAR_KEY, imageUri);
 
             // Update profile with new avatar
-            await this.saveProfile({ avatar: imageUri });
+            await this.saveProfile({ profilePictureUrl: imageUri });
 
             console.log('[UserProfile] Avatar saved successfully:', imageUri);
             return imageUri;
@@ -87,7 +87,7 @@ export const userProfileService = {
     async deleteAvatar(): Promise<void> {
         try {
             await AsyncStorage.removeItem(USER_AVATAR_KEY);
-            await this.saveProfile({ avatar: undefined });
+            await this.saveProfile({ profilePictureUrl: undefined });
             console.log('[UserProfile] Avatar deleted successfully');
         } catch (error) {
             console.error('[UserProfile] Error deleting avatar:', error);
@@ -114,11 +114,18 @@ export const userProfileService = {
      */
     async initializeProfile(userId: string, name: string): Promise<UserProfile> {
         const defaultProfile: UserProfile = {
-            id: userId,
-            name: name,
-            gender: 'Male',
-            height: 170,
-            age: 25,
+            id: Number(userId),
+            username: name,
+            firstName: '',
+            lastName: '',
+            email: '',
+            dob: '',
+            gender: 'MALE',
+            heightM: 0,
+            weightKg: 0,
+            age: 0,
+            bmi: 0,
+            enable: true,
         };
         await this.saveProfile(defaultProfile);
         return defaultProfile;
