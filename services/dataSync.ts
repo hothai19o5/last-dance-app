@@ -2,7 +2,8 @@
 import { BLEHealthData } from '@/types';
 import { apiService, HealthDataDto, HealthDataPoint } from './api';
 
-const SYNC_INTERVAL = 30 * 60 * 1000; // 30 minutes in milliseconds
+const SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes in milliseconds
+const MAX_BUFFER_SIZE = 1000; // Max records to hold in buffer
 
 class DataSyncService {
     private dataBuffer: BLEHealthData[] = [];
@@ -15,19 +16,24 @@ class DataSyncService {
      */
     start(deviceId: string, deviceName: string) {
         console.log('[DataSync] Starting sync service for device:', deviceName);
+        console.log(`[DataSync] Config - Interval: ${SYNC_INTERVAL / 1000}s (${SYNC_INTERVAL / 60000} min), Max buffer: ${MAX_BUFFER_SIZE}`);
         this.deviceId = deviceId;
         this.deviceName = deviceName;
 
         // Clear existing timer
         this.stop();
 
-        // Set up periodic sync every 30 minutes
+        // Set up periodic sync every 5 minutes
         this.syncTimer = setInterval(() => {
+            console.log('[DataSync] Periodic sync triggered (5 min interval)');
             this.syncToServer();
         }, SYNC_INTERVAL);
 
+        console.log('[DataSync] Sync timer started - will sync every 5 minutes');
+
         // Also sync immediately if buffer has data
         if (this.dataBuffer.length > 0) {
+            console.log(`[DataSync] Buffer has ${this.dataBuffer.length} records, syncing immediately...`);
             this.syncToServer();
         }
     }
@@ -48,11 +54,25 @@ class DataSyncService {
      */
     addData(data: BLEHealthData) {
         this.dataBuffer.push(data);
-        console.log(`[DataSync] Data added to buffer. Total: ${this.dataBuffer.length} records`);
+        console.log(`[DataSync] Single data added to buffer. Total: ${this.dataBuffer.length}/${MAX_BUFFER_SIZE} records`);
 
-        // Optional: Sync immediately if buffer is too large (> 100 records)
-        if (this.dataBuffer.length >= 100) {
-            console.log('[DataSync] Buffer full, syncing immediately...');
+        // Sync immediately if buffer reaches max size
+        if (this.dataBuffer.length >= MAX_BUFFER_SIZE) {
+            console.log('[DataSync] Buffer reached max size, syncing immediately...');
+            this.syncToServer();
+        }
+    }
+
+    /**
+     * Thêm batch data vào buffer (nhiều records cùng lúc)
+     */
+    addBatchData(dataArray: BLEHealthData[]) {
+        this.dataBuffer.push(...dataArray);
+        console.log(`[DataSync] Batch data added: ${dataArray.length} records. Total: ${this.dataBuffer.length}/${MAX_BUFFER_SIZE} records`);
+
+        // Sync immediately if buffer reaches or exceeds max size
+        if (this.dataBuffer.length >= MAX_BUFFER_SIZE) {
+            console.log('[DataSync] Buffer reached max size after batch, syncing immediately...');
             this.syncToServer();
         }
     }
@@ -62,14 +82,18 @@ class DataSyncService {
      */
     async syncToServer(): Promise<boolean> {
         if (this.dataBuffer.length === 0) {
-            console.log('[DataSync] No data to sync');
+            console.log('[DataSync] No data to sync, skipping...');
             return true;
         }
+
+        console.log(`[DataSync] ========== SYNC START ==========`);
+        console.log(`[DataSync] Buffer size: ${this.dataBuffer.length} records`);
 
         // Check if user is authenticated before syncing
         const isAuthenticated = await apiService.isAuthenticated();
         if (!isAuthenticated) {
             console.warn('[DataSync] User not authenticated, skipping sync');
+            console.warn(`[DataSync] ${this.dataBuffer.length} records remain in buffer`);
             return false;
         }
 
@@ -92,17 +116,24 @@ class DataSyncService {
 
         try {
             const result = await apiService.sendHealthData(healthDataDto);
-            console.log('[DataSync] Sync successful! Server response:', result);
+            console.log('[DataSync] ✅ Sync successful!');
+            console.log('[DataSync] Server response:', result.message);
 
             // Clear buffer after successful sync
+            const syncedCount = this.dataBuffer.length;
             this.dataBuffer = [];
+            console.log(`[DataSync] Buffer cleared (${syncedCount} records synced)`);
+            console.log(`[DataSync] ========== SYNC END ==========`);
             return true;
         } catch (error: any) {
-            console.error('[DataSync] Sync error:', error);
+            console.error('[DataSync] ❌ Sync failed:', error.message || error);
+            console.error(`[DataSync] ${this.dataBuffer.length} records remain in buffer`);
+
             // If unauthorized, user needs to login again
             if (error.status === 401) {
                 console.error('[DataSync] Unauthorized - Token may be invalid or expired. Please login again');
             }
+            console.log(`[DataSync] ========== SYNC END (FAILED) ==========`);
             return false;
         }
     }

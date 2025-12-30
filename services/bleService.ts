@@ -146,22 +146,22 @@ export class BLEService {
       if (Platform.OS === 'android') {
         try {
           const mtu = await device.requestMTU(REQUIRED_MTU);
-          console.log(`[BLE] ✅ MTU set to: ${mtu} bytes`);
+          console.log(`[BLE] MTU set to: ${mtu} bytes`);
         } catch (error) {
-          console.warn('[BLE] ⚠️ MTU request failed (may use default):', error);
+          console.warn('[BLE] MTU request failed (may use default):', error);
         }
       } else {
         console.log('[BLE] iOS: MTU is automatically managed');
       }
 
       // CRITICAL: Perform Time Sync immediately after connection
-      console.log('[BLE] 🕐 Performing mandatory Time Sync...');
+      console.log('[BLE] Performing mandatory Time Sync...');
       const timeSyncSuccess = await this.syncTime(deviceId);
       if (!timeSyncSuccess) {
-        console.error('[BLE] ❌ Time sync failed! Timestamps will be incorrect.');
+        console.error('[BLE] Time sync failed! Timestamps will be incorrect.');
         // Don't fail connection, but warn user
       } else {
-        console.log('[BLE] ✅ Time sync successful');
+        console.log('[BLE] Time sync successful');
       }
 
       console.log('[BLE] Connected successfully to:', deviceId);
@@ -193,10 +193,10 @@ export class BLEService {
         ? (timestamp instanceof Date ? Math.floor(timestamp.getTime() / 1000) : timestamp)
         : Math.floor(Date.now() / 1000);
 
-      console.log('[BLE] ✅ Time synced:', new Date(unixTime * 1000).toISOString());
+      console.log('[BLE] Time synced:', new Date(unixTime * 1000).toISOString());
       return true;
     } catch (error) {
-      console.error('[BLE] ❌ Time sync error:', error);
+      console.error('[BLE] Time sync error:', error);
       return false;
     }
   }
@@ -266,10 +266,10 @@ export class BLEService {
         encoded.mlEnable
       );
 
-      console.log('[BLE] ✅ Config written successfully');
+      console.log('[BLE] Config written successfully');
       return true;
     } catch (error) {
-      console.error('[BLE] ❌ Write config error:', error);
+      console.error('[BLE] Write config error:', error);
       return false;
     }
   }
@@ -435,12 +435,12 @@ export class BLEService {
             if (parsed.type === 'single' || parsed.type === 'alert') {
               // Single packet or alert
               const healthData = parsed.data as BLEHealthData;
-              console.log('[BLE] ❤️ Received health data:', healthData);
+              console.log('[BLE] Received health data:', healthData);
               onDataReceived(healthData);
             } else if (parsed.type === 'batch') {
               // Batch data (multiple packets)
               const batchData = parsed.data as BLEBatchData;
-              console.log('[BLE] 📊 Received batch data:', batchData.count, 'packets');
+              console.log('[BLE] Received batch data:', batchData.count, 'packets');
 
               if (onBatchReceived) {
                 onBatchReceived(batchData);
@@ -453,7 +453,7 @@ export class BLEService {
         }
       );
 
-      console.log('[BLE] ✅ Successfully subscribed to health data');
+      console.log('[BLE] Successfully subscribed to health data');
 
       // Return unsubscribe function
       return () => {

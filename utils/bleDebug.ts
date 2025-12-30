@@ -10,6 +10,38 @@ const HEALTH_PACKET_SIZE = 8;        // Basic HealthDataPacket (timestamp:4 + st
 const HEALTH_PACKET_WITH_ALERT = 12; // HealthDataPacket (8 bytes) + AlertScore (float, 4 bytes)
 
 /**
+ * Helper functions to read from Uint8Array/Buffer (Little Endian)
+ * React Native's buffer.subarray() returns Uint8Array which doesn't have readUInt32LE etc.
+ */
+function readUInt32LE(buffer: Uint8Array | Buffer, offset: number): number {
+    return (
+        buffer[offset] |
+        (buffer[offset + 1] << 8) |
+        (buffer[offset + 2] << 16) |
+        (buffer[offset + 3] << 24)
+    ) >>> 0; // Convert to unsigned
+}
+
+function readUInt16LE(buffer: Uint8Array | Buffer, offset: number): number {
+    return buffer[offset] | (buffer[offset + 1] << 8);
+}
+
+function readUInt8(buffer: Uint8Array | Buffer, offset: number): number {
+    return buffer[offset];
+}
+
+function readFloatLE(buffer: Uint8Array | Buffer, offset: number): number {
+    const bytes = new Uint8Array([
+        buffer[offset],
+        buffer[offset + 1],
+        buffer[offset + 2],
+        buffer[offset + 3]
+    ]);
+    const view = new DataView(bytes.buffer);
+    return view.getFloat32(0, true); // true = little endian
+}
+
+/**
  * List all services and characteristics of a connected device
  * Useful for discovering UUIDs
  */
@@ -139,15 +171,15 @@ export function parseBatteryLevel(base64Value: string): number {
  * @param buffer - Buffer containing exactly 8 bytes
  * @returns Parsed health data (without alertScore)
  */
-export function parseHealthDataPacket(buffer: Buffer): Omit<BLEHealthData, 'alertScore' | 'timestampISO'> {
+export function parseHealthDataPacket(buffer: Uint8Array | Buffer): Omit<BLEHealthData, 'alertScore' | 'timestampISO'> {
     if (buffer.length < HEALTH_PACKET_SIZE) {
         throw new Error(`Invalid packet size: ${buffer.length}, expected ${HEALTH_PACKET_SIZE}`);
     }
 
-    const timestamp = buffer.readUInt32LE(0);
-    const steps = buffer.readUInt16LE(4);
-    const heartRate = buffer.readUInt8(6);
-    const spo2 = buffer.readUInt8(7);
+    const timestamp = readUInt32LE(buffer, 0);
+    const steps = readUInt16LE(buffer, 4);
+    const heartRate = readUInt8(buffer, 6);
+    const spo2 = readUInt8(buffer, 7);
 
     return {
         timestamp,
@@ -197,7 +229,7 @@ export function parseHealthDataNotification(base64Value: string): {
         // Case 2: Packet with alert (12 bytes)
         if (length === HEALTH_PACKET_WITH_ALERT) {
             const packet = parseHealthDataPacket(buffer);
-            const alertScore = buffer.readFloatLE(8);
+            const alertScore = readFloatLE(buffer, 8);
 
             const healthData: BLEHealthData = {
                 ...packet,

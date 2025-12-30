@@ -19,7 +19,7 @@ const { width } = Dimensions.get('window');
 export default function HealthScreen() {
     const colors = useThemeColors();
     const { themeTransition } = useTheme();
-    const { healthData, device, pendingSyncCount, forceSyncToServer } = useDevice();
+    const { healthData, pendingSyncCount, forceSyncToServer } = useDevice();
     const fadeAnim = useRef(new Animated.Value(1)).current;
     const [showAddMenu, setShowAddMenu] = useState(false);
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -76,13 +76,14 @@ export default function HealthScreen() {
     // Health goals
     const caloriesGoal = 200;
     const stepsGoal = 2000;
-    const standingGoal = 6;
+    const waterIntakeGoal = 2;
 
     // Use real data from device, default to 0 if no data
     const heartRate = healthData?.heartRate || 0;
     const spo2 = healthData?.spo2 || 0;
     const currentSteps = healthData?.steps || 0;
     const currentCalories = 0;
+    const currentWaterIntake = 0;
     const alertScore = healthData?.alertScore;
     const userWeight = userProfile?.weightKg || null;
 
@@ -132,7 +133,7 @@ export default function HealthScreen() {
     // Calculate overall completion percentage
     const caloriesPercent = (currentCalories / caloriesGoal) * 100;
     const stepsPercent = (currentSteps / stepsGoal) * 100;
-    const standingPercent = 0; // Standing data not available yet
+    const waterIntakePercent = (currentWaterIntake / waterIntakeGoal) * 100;
 
     // Calculate cookies earned (1 cookie per 50 calories)
     const cookiesEarned = Math.floor(currentCalories / 50);
@@ -144,8 +145,8 @@ export default function HealthScreen() {
             color: colors.stepsColor,
         },
         {
-            value: standingPercent / 100 > 1 ? 1 : standingPercent / 100,
-            color: colors.standingColor,
+            value: waterIntakePercent / 100 > 1 ? 1 : waterIntakePercent / 100,
+            color: colors.waterIntakeColor,
         },
         {
             value: caloriesPercent / 100 > 1 ? 1 : caloriesPercent / 100,
@@ -170,7 +171,7 @@ export default function HealthScreen() {
         },
         {
             icon: 'water' as const,
-            iconColor: colors.info,
+            iconColor: colors.waterIntakeColor,
             title: 'Log Water Intake',
             onPress: () => showToast.info('Feature coming soon'),
         },
@@ -250,7 +251,7 @@ export default function HealthScreen() {
                         iconColor={colors.caloriesColor}
                         label="Calories"
                         value={currentCalories}
-                        unit="kcal"
+                        unit=" kcal"
                         goal={caloriesGoal}
                         colors={colors}
                     />
@@ -259,17 +260,17 @@ export default function HealthScreen() {
                         iconColor={colors.stepsColor}
                         label="Steps"
                         value={currentSteps}
-                        unit="steps"
+                        unit=" steps"
                         goal={stepsGoal}
                         colors={colors}
                     />
                     <MetricCard
-                        icon="trophy"
-                        iconColor={colors.standingColor}
-                        label="Standing"
-                        value={0}
-                        unit="hrs"
-                        goal={standingGoal}
+                        icon="water"
+                        iconColor={colors.waterIntakeColor}
+                        label="Water Intake"
+                        value={currentWaterIntake}
+                        unit=" L"
+                        goal={waterIntakeGoal}
                         colors={colors}
                     />
                 </View>
@@ -389,7 +390,7 @@ export default function HealthScreen() {
                         </View>
                     </TouchableOpacity>
 
-                    {/* Sleep Card - No data available */}
+                    {/* Sleep Card - LineChart mock-data */}
                     <TouchableOpacity style={[styles.detailCard, { backgroundColor: colors.cardBackground }]}>
                         <View style={styles.cardHeader}>
                             <View style={[styles.circleIcon, { backgroundColor: colors.sleepIconBg }]}>
@@ -397,7 +398,7 @@ export default function HealthScreen() {
                             </View>
                             <Text style={[styles.cardTitle, { color: colors.text }]}>Sleep</Text>
                         </View>
-                        <Text style={[styles.cardValue, { color: colors.text }]}>--</Text>
+                        <Text style={[styles.cardValue, { color: colors.text }]}>6h 25m</Text>
                         <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>
                             No data
                         </Text>

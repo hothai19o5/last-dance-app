@@ -30,7 +30,7 @@ export const Colors = {
     // Health metrics
     caloriesColor: '#FF453A',
     stepsColor: '#34C759',
-    standingColor: '#FFD60A',
+    waterIntakeColor: '#ffd20a',
     heartRateColor: '#FF453A',
     sleepColor: '#5E5CE6',
     spO2Color: '#FF453A',
@@ -76,7 +76,7 @@ export const Colors = {
     // Health metrics (brighter for dark mode)
     caloriesColor: '#FF6961',
     stepsColor: '#32D74B',
-    standingColor: '#FFD60A',
+    waterIntakeColor: '#ffd20a',
     heartRateColor: '#FF6961',
     sleepColor: '#5E5CE6',
     spO2Color: '#FF6961',

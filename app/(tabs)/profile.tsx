@@ -126,10 +126,14 @@ export default function ProfileScreen() {
                 </View>
                 <View style={styles.userInfo}>
                     <Text style={[styles.userId, { color: colors.text }]}>
-                        {profile?.firstName + ' ' + profile?.lastName || 'Guest User'}
+                        {profile?.firstName && profile?.lastName
+                            ? `${profile.firstName} ${profile.lastName}`
+                            : profile?.username || 'Guest User'}
                     </Text>
                     <Text style={[styles.userDetails, { color: colors.textSecondary }]}>
-                        {profile ? `${profile.gender}   ${profile.heightM} cm   ${profile.age}` : 'Tap to set up profile'}
+                        {profile
+                            ? `${profile.gender || ''}   ${profile.heightM ? `${profile.heightM} m` : ''}   ${profile.age ? `${profile.age} years` : ''}`
+                            : 'Tap to set up profile'}
                     </Text>
                 </View>
             </TouchableOpacity>

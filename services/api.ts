@@ -1,6 +1,5 @@
 // API Service - Central API client with JWT authentication
 import { authService } from "./authService";
-import { userProfileService } from "./userProfileService";
 
 // API Base URL - Update this to your actual server URL
 const API_BASE_URL = 'https://hoxuanthai.id.vn/api/v1';
@@ -13,6 +12,8 @@ export const API_ENDPOINTS = {
 
     // User
     USER_DETAIL: '/user/me',
+    USER_UPDATE: '/user',
+    USER_AVATAR: '/user/avatar',
 
     // Health Data
     HEALTH_DATA: '/sync/health-data',
@@ -82,6 +83,20 @@ export interface UserDetailResponse {
     bmi?: number;
     enable?: boolean;
     dob?: string;
+}
+
+export interface UpdateUserRequest {
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    gender?: 'MALE' | 'FEMALE';
+    heightM?: number;
+    weightKg?: number;
+    dob?: string;
+}
+
+export interface AvatarUploadResponse {
+    imageUrl: string;
 }
 
 export interface ApiError {
@@ -254,7 +269,45 @@ class ApiService {
         return this.handleResponse<T>(response);
     }
 
-    // ==================== Auth APIs ====================
+    /**
+     * Generic PATCH request
+     */
+    async patch<T, R>(endpoint: string, data: T, requiresAuth: boolean = true): Promise<R> {
+        const headers = await this.getHeaders(requiresAuth);
+        const response = await this.fetchWithTimeout(this.getUrl(endpoint), {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify(data),
+        });
+
+        return this.handleResponse<R>(response);
+    }
+
+    /**
+     * POST request with FormData (for file uploads)
+     */
+    async postFormData<R>(endpoint: string, formData: FormData, requiresAuth: boolean = true): Promise<R> {
+        const headers: HeadersInit = {};
+        // Don't set Content-Type for FormData - browser will set it with boundary
+        
+        if (requiresAuth) {
+            const token = await authService.getAccessToken();
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+                console.log('[API] Adding auth token to FormData headers');
+            } else {
+                console.warn('[API] No auth token found for authenticated FormData request');
+            }
+        }
+
+        const response = await this.fetchWithTimeout(this.getUrl(endpoint), {
+            method: 'POST',
+            headers,
+            body: formData,
+        });
+
+        return this.handleResponse<R>(response);
+    }
 
     /**
      * Register new user
@@ -306,6 +359,49 @@ class ApiService {
      */
     async getUserDetail(): Promise<ApiResponse<UserDetailResponse>> {
         return this.get<ApiResponse<UserDetailResponse>>(API_ENDPOINTS.USER_DETAIL, true);
+    }
+
+    /**
+     * Update user profile information
+     * @param data - User data to update
+     * @returns Updated user data
+     */
+    async updateUser(data: UpdateUserRequest): Promise<ApiResponse<UserDetailResponse>> {
+        console.log('[API] Updating user profile:', data);
+        return this.patch<UpdateUserRequest, ApiResponse<UserDetailResponse>>(
+            API_ENDPOINTS.USER_UPDATE,
+            data,
+            true // Requires authentication
+        );
+    }
+
+    /**
+     * Upload user avatar
+     * @param imageUri - Local URI of the image to upload
+     * @returns URL of the uploaded avatar
+     */
+    async uploadAvatar(imageUri: string): Promise<ApiResponse<string>> {
+        console.log('[API] Uploading avatar:', imageUri);
+        
+        const formData = new FormData();
+        
+        // Get file extension and mime type
+        const uriParts = imageUri.split('.');
+        const fileType = uriParts[uriParts.length - 1] || 'jpg';
+        const mimeType = `image/${fileType === 'jpg' ? 'jpeg' : fileType}`;
+        
+        // Append the file to form data
+        formData.append('file', {
+            uri: imageUri,
+            name: `avatar.${fileType}`,
+            type: mimeType,
+        } as any);
+        
+        return this.postFormData<ApiResponse<string>>(
+            API_ENDPOINTS.USER_AVATAR,
+            formData,
+            true // Requires authentication
+        );
     }
 
     /**

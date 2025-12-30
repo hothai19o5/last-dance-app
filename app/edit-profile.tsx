@@ -2,12 +2,26 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useThemeColors } from '../contexts/ThemeContext';
 import { userProfileService } from '../services/userProfileService';
 import { UserProfile } from '../types';
 import { showToast } from '../utils/toast';
+
+/**
+ * Calculate age from date of birth
+ */
+const calculateAge = (dob: Date | undefined): number => {
+    if (!dob) return 0;
+    const today = new Date();
+    let age = today.getFullYear() - dob.getFullYear();
+    const monthDiff = today.getMonth() - dob.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+        age--;
+    }
+    return age;
+};
 
 interface EditProfileScreenProps {
     existingProfile: UserProfile | null;
@@ -18,6 +32,8 @@ export default function EditProfileScreen() {
     const router = useRouter();
     const colors = useThemeColors();
     const [loading, setLoading] = useState(false);
+    const [avatarUploading, setAvatarUploading] = useState(false);
+    const [originalAvatarUrl, setOriginalAvatarUrl] = useState<string | undefined>(undefined);
 
     // Form state
     const [username, setUsername] = useState('');
@@ -26,11 +42,13 @@ export default function EditProfileScreen() {
     const [gender, setGender] = useState<'MALE' | 'FEMALE'>('MALE');
     const [email, setEmail] = useState('');
     const [heightM, setHeightM] = useState('');
-    const [age, setAge] = useState('');
     const [weightKg, setWeightKg] = useState('');
     const [profilePictureUrl, setProfilePictureUrl] = useState<string | undefined>(undefined);
     const [dateOfBirth, setDateOfBirth] = useState<Date | undefined>(undefined);
     const [openDatePicker, setOpenDatePicker] = useState(false);
+
+    // Calculate age from date of birth
+    const calculatedAge = useMemo(() => calculateAge(dateOfBirth), [dateOfBirth]);
 
     // Load existing profile on mount
     React.useEffect(() => {
@@ -46,9 +64,9 @@ export default function EditProfileScreen() {
                 setLastName(profile.lastName || '');
                 setGender(profile.gender || 'MALE');
                 setHeightM(profile.heightM?.toString() || '');
-                setAge(profile.age?.toString() || '');
                 setWeightKg(profile.weightKg?.toString() || '');
                 setProfilePictureUrl(profile.profilePictureUrl);
+                setOriginalAvatarUrl(profile.profilePictureUrl);
                 setEmail(profile.email || '');
                 if (profile.dob) {
                     setDateOfBirth(new Date(profile.dob));
@@ -179,13 +197,28 @@ export default function EditProfileScreen() {
 
         setLoading(true);
         try {
-            // Save avatar if changed
             let finalAvatarUri = profilePictureUrl;
-            if (profilePictureUrl) {
-                finalAvatarUri = await userProfileService.saveAvatar(profilePictureUrl);
+
+            // Upload avatar if it has changed (local file vs server URL)
+            if (profilePictureUrl && profilePictureUrl !== originalAvatarUrl) {
+                // Check if it's a local file (not a server URL)
+                if (profilePictureUrl.startsWith('file://') || profilePictureUrl.startsWith('content://')) {
+                    setAvatarUploading(true);
+                    showToast.info('Uploading', 'Uploading avatar...');
+                    try {
+                        finalAvatarUri = await userProfileService.saveAvatar(profilePictureUrl);
+                        showToast.success('Avatar uploaded', 'Avatar uploaded successfully');
+                    } catch (avatarError) {
+                        console.error('[EditProfile] Error uploading avatar:', avatarError);
+                        showToast.error('Avatar Error', 'Failed to upload avatar. Profile will be saved without avatar change.');
+                        finalAvatarUri = originalAvatarUrl; // Keep original if upload fails
+                    } finally {
+                        setAvatarUploading(false);
+                    }
+                }
             }
 
-            // Save profile
+            // Save profile via API
             const profileData: Partial<UserProfile> = {
                 firstName: firstName.trim(),
                 lastName: lastName.trim(),
@@ -195,8 +228,6 @@ export default function EditProfileScreen() {
                 email: email.trim(),
                 dob: dateOfBirth ? dateOfBirth.toISOString().split('T')[0] : undefined,
                 profilePictureUrl: finalAvatarUri,
-                username: username.trim(),
-                age: age ? Number(age) : undefined,
             };
 
             await userProfileService.saveProfile(profileData);
@@ -359,6 +390,16 @@ export default function EditProfileScreen() {
                             <Ionicons name="calendar-outline" size={20} color={colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
+
+                    {/* Display calculated age */}
+                    {dateOfBirth && (
+                        <View style={[styles.formField, { borderTopColor: colors.divider, borderTopWidth: 1 }]}>
+                            <Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>Age (calculated)</Text>
+                            <Text style={[styles.fieldInput, { color: colors.text }]}>
+                                {calculatedAge} years old
+                            </Text>
+                        </View>
+                    )}
 
                 </View>
 

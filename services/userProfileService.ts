@@ -1,14 +1,70 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserProfile } from '../types';
+import { apiService, UpdateUserRequest } from './api';
 
 const USER_PROFILE_KEY = '@user_profile';
 const USER_AVATAR_KEY = '@user_avatar';
 
 export const userProfileService = {
     /**
-     * Save user profile to AsyncStorage
+     * Calculate age from date of birth
+     */
+    calculateAge(dob: string | undefined): number {
+        if (!dob) return 0;
+        const birthDate = new Date(dob);
+        const today = new Date();
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+        }
+        return age;
+    },
+
+    /**
+     * Save user profile to both API and AsyncStorage
      */
     async saveProfile(profile: Partial<UserProfile>): Promise<void> {
+        try {
+            // Prepare data for API - only send fields that API accepts
+            const apiData: UpdateUserRequest = {};
+            if (profile.firstName !== undefined) apiData.firstName = profile.firstName;
+            if (profile.lastName !== undefined) apiData.lastName = profile.lastName;
+            if (profile.email !== undefined) apiData.email = profile.email;
+            if (profile.gender !== undefined) apiData.gender = profile.gender;
+            if (profile.heightM !== undefined) apiData.heightM = profile.heightM;
+            if (profile.weightKg !== undefined) apiData.weightKg = profile.weightKg;
+            if (profile.dob !== undefined) apiData.dob = profile.dob;
+
+            // Call API to update user profile
+            console.log('[UserProfile] Calling API to update profile:', apiData);
+            const response = await apiService.updateUser(apiData);
+            console.log('[UserProfile] API update response:', response);
+
+            // Calculate age from dob if available
+            const age = this.calculateAge(profile.dob || response.data?.dob);
+
+            // Merge API response with local profile and save to AsyncStorage
+            const existingProfile = await this.getProfile();
+            const updatedProfile: UserProfile = {
+                ...existingProfile,
+                ...profile,
+                ...response.data,
+                age,
+            };
+
+            await AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(updatedProfile));
+            console.log('[UserProfile] Profile saved successfully:', updatedProfile);
+        } catch (error) {
+            console.error('[UserProfile] Error saving profile:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Save user profile to local storage only (without API call)
+     */
+    async saveProfileLocal(profile: Partial<UserProfile>): Promise<void> {
         try {
             const existingProfile = await this.getProfile();
             const updatedProfile = {
@@ -16,9 +72,9 @@ export const userProfileService = {
                 ...profile,
             };
             await AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(updatedProfile));
-            console.log('[UserProfile] Profile saved successfully:', updatedProfile);
+            console.log('[UserProfile] Profile saved locally:', updatedProfile);
         } catch (error) {
-            console.error('[UserProfile] Error saving profile:', error);
+            console.error('[UserProfile] Error saving profile locally:', error);
             throw error;
         }
     },
@@ -31,6 +87,10 @@ export const userProfileService = {
             const profileData = await AsyncStorage.getItem(USER_PROFILE_KEY);
             if (profileData) {
                 const profile = JSON.parse(profileData);
+                // Calculate age from dob if available
+                if (profile.dob) {
+                    profile.age = this.calculateAge(profile.dob);
+                }
                 console.log('[UserProfile] Profile loaded:', profile);
                 return profile;
             }
@@ -42,28 +102,57 @@ export const userProfileService = {
     },
 
     /**
-     * Save user avatar to local storage
+     * Fetch user profile from API and update local storage
+     */
+    async fetchProfileFromApi(): Promise<UserProfile | null> {
+        try {
+            console.log('[UserProfile] Fetching profile from API...');
+            const response = await apiService.getUserDetail();
+
+            if (response.data) {
+                const profile: UserProfile = {
+                    ...response.data,
+                    age: this.calculateAge(response.data.dob),
+                };
+
+                // Save to local storage
+                await AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(profile));
+                console.log('[UserProfile] Profile fetched and saved:', profile);
+                return profile;
+            }
+            return null;
+        } catch (error) {
+            console.error('[UserProfile] Error fetching profile from API:', error);
+            // Fall back to local profile if API fails
+            return this.getProfile();
+        }
+    },
+
+    /**
+     * Upload user avatar to server
      * @param imageUri - URI of the selected image
-     * @returns Local file path of the saved avatar
+     * @returns URL of the uploaded avatar from server
      */
     async saveAvatar(imageUri: string): Promise<string> {
         try {
-            // Simply save the URI directly without copying
-            // (For production, integrate with cloud storage like S3, Cloudinary, etc.)
+            console.log('[UserProfile] Uploading avatar to server:', imageUri);
 
-            // Delete old avatar reference if exists
-            const oldAvatarUri = await AsyncStorage.getItem(USER_AVATAR_KEY);
+            // Upload to server
+            const response = await apiService.uploadAvatar(imageUri);
+            const serverAvatarUrl = response.data;
 
-            // Save new avatar URI to AsyncStorage
-            await AsyncStorage.setItem(USER_AVATAR_KEY, imageUri);
+            console.log('[UserProfile] Avatar uploaded, server URL:', serverAvatarUrl);
 
-            // Update profile with new avatar
-            await this.saveProfile({ profilePictureUrl: imageUri });
+            // Save server URL to AsyncStorage
+            await AsyncStorage.setItem(USER_AVATAR_KEY, serverAvatarUrl);
 
-            console.log('[UserProfile] Avatar saved successfully:', imageUri);
-            return imageUri;
+            // Update profile with new avatar URL
+            await this.saveProfileLocal({ profilePictureUrl: serverAvatarUrl });
+
+            console.log('[UserProfile] Avatar saved successfully:', serverAvatarUrl);
+            return serverAvatarUrl;
         } catch (error) {
-            console.error('[UserProfile] Error saving avatar:', error);
+            console.error('[UserProfile] Error uploading avatar:', error);
             throw error;
         }
     },

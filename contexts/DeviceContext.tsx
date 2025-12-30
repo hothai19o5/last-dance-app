@@ -123,13 +123,13 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                 async (batchData: BLEBatchData) => {
                     console.log('[DeviceContext] Received batch data:', batchData.count, 'samples');
 
-                    // Process each packet in the batch
+                    // Save all packets to health history for charts
                     for (const packet of batchData.packets) {
-                        // Save to health history for charts
                         await healthHistoryService.addHealthData(packet);
-                        // Add to sync buffer
-                        dataSyncService.addData(packet);
                     }
+
+                    // Add entire batch to sync buffer at once (more efficient)
+                    dataSyncService.addBatchData(batchData.packets);
 
                     // Update current health data with latest from batch
                     if (batchData.packets.length > 0) {
@@ -139,8 +139,8 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
                     updateSyncCount();
 
-                    // Sync batch data to server
-                    await dataSyncService.forceSyncNow();
+                    // Note: No need to force sync here - batch data will be synced automatically
+                    // based on buffer size (1000 records) or interval (5 minutes)
                 }
             ).then((unsub) => {
                 unsubscribeHealth = unsub;
