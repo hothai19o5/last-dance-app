@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { BarChart, LineChart } from 'react-native-gifted-charts';
@@ -285,6 +285,7 @@ export default function HealthScreen() {
                         unit=" kcal"
                         goal={caloriesGoal}
                         colors={colors}
+                        onPress={() => router.push('/calories-stats')}
                     />
                     <MetricCard
                         icon="walk"
@@ -294,6 +295,7 @@ export default function HealthScreen() {
                         unit=" steps"
                         goal={stepsGoal}
                         colors={colors}
+                        onPress={() => router.push('/steps-stats')}
                     />
                     <MetricCard
                         icon="water"
@@ -303,6 +305,7 @@ export default function HealthScreen() {
                         unit=" ml"
                         goal={waterIntakeGoal}
                         colors={colors}
+                        onPress={() => router.push('/water-stats')}
                     />
                 </View>
 
@@ -321,7 +324,10 @@ export default function HealthScreen() {
                 {/* Detail Cards */}
                 <View style={styles.detailCards}>
                     {/* Heart Rate Card */}
-                    <TouchableOpacity style={[styles.detailCard, { backgroundColor: colors.cardBackground }]}>
+                    <TouchableOpacity
+                        style={[styles.detailCard, { backgroundColor: colors.cardBackground }]}
+                        onPress={() => router.push('/heart-rate-stats')}
+                    >
                         <View style={styles.cardHeader}>
                             <View style={[styles.circleIcon, { backgroundColor: colors.heartRateIconBg }]}>
                                 <Ionicons name="heart" size={12} color={colors.iconOnColor} />
@@ -353,7 +359,10 @@ export default function HealthScreen() {
                     </TouchableOpacity>
 
                     {/* SpO2 Card */}
-                    <TouchableOpacity style={[styles.detailCard, { backgroundColor: colors.cardBackground }]}>
+                    <TouchableOpacity
+                        style={[styles.detailCard, { backgroundColor: colors.cardBackground }]}
+                        onPress={() => router.push('/spo2-stats')}
+                    >
                         <View style={styles.cardHeader}>
                             <View style={[styles.circleIcon, { backgroundColor: colors.spO2IconBg }]}>
                                 <Ionicons name="water" size={12} color={colors.iconOnColor} />
@@ -385,7 +394,10 @@ export default function HealthScreen() {
                     </TouchableOpacity>
 
                     {/* Weight Card - From user profile with chart */}
-                    <TouchableOpacity style={[styles.detailCard, { backgroundColor: colors.cardBackground }]}>
+                    <TouchableOpacity
+                        style={[styles.detailCard, { backgroundColor: colors.cardBackground }]}
+                        onPress={() => router.push('/weight-stats')}
+                    >
                         <View style={styles.cardHeader}>
                             <View style={[styles.circleIcon, { backgroundColor: colors.weightIconBg }]}>
                                 <Ionicons name="scale" size={12} color={colors.iconOnColor} />
@@ -424,7 +436,10 @@ export default function HealthScreen() {
                     </TouchableOpacity>
 
                     {/* Sleep Card - LineChart mock-data */}
-                    <TouchableOpacity style={[styles.detailCard, { backgroundColor: colors.cardBackground }]}>
+                    <TouchableOpacity
+                        style={[styles.detailCard, { backgroundColor: colors.cardBackground }]}
+                        onPress={() => router.push('/sleep-stats')}
+                    >
                         <View style={styles.cardHeader}>
                             <View style={[styles.circleIcon, { backgroundColor: colors.sleepIconBg }]}>
                                 <Ionicons name="moon" size={12} color={colors.iconOnColor} />
@@ -470,13 +485,17 @@ interface MetricCardProps {
     value: number;
     unit: string;
     goal: number | null;
-    colors?: any;
+    colors: any;
+    onPress?: () => void;
 }
 
-const MetricCard: React.FC<MetricCardProps> = ({ icon, iconColor, label, value, unit, goal, colors }) => {
+const MetricCard: React.FC<MetricCardProps> = ({ icon, iconColor, label, value, unit, goal, colors, onPress }) => {
     const themeColors = colors || useThemeColors();
     return (
-        <TouchableOpacity style={[styles.metricCard, { backgroundColor: themeColors.cardBackground }]}>
+        <TouchableOpacity
+            style={[styles.metricCard, { backgroundColor: themeColors.cardBackground }]}
+            onPress={onPress}
+        >
             <View style={[styles.circleIcon, { backgroundColor: iconColor }]}>
                 <Ionicons name={icon} size={14} color='#FFFFFF' />
             </View>
