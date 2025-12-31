@@ -91,13 +91,20 @@ export interface BLEConfig {
     mlEnable: number;      // 0: Disabled, 1: Enabled (AI anomaly detection)
 }
 
-// Health data received from ESP32 device (binary packet - 10 or 14 bytes)
+// Activity status enum
+export type ActivityStatus = 0 | 1 | 2 | 3; // 0=sleeping, 1=resting, 2=walking, 3=running
+
+// Health data received from ESP32 device (binary packet - 10, 14, or 18 bytes)
 export interface BLEHealthData {
     timestamp: number;          // Unix timestamp (uint32)
     steps: number;              // Total step count (uint32)
     heartRate: number;          // HR in BPM (uint8)
     spo2: number;              // SpO2 in % (uint8)
-    alertScore: number | null;  // ML alert score (float, 0-1), present when packet is 14 bytes
+    alertScore: number | null;  // ML alert score (float, 0-1), present when packet is 14+ bytes
+    activityStatus?: ActivityStatus; // 0=sleeping, 1=resting, 2=walking, 3=running (uint8)
+    sleepDurationMinutes?: number;  // Sleep duration in minutes (uint16)
+    caloriesBurned?: number;    // Calculated calories burned (not from device, calculated locally)
+    waterIntakeMl?: number;     // Water intake in ml (not from device, tracked locally)
     timestampISO: string;      // ISO string for display/storage
 }
 

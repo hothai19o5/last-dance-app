@@ -129,17 +129,16 @@ export const userProfileService = {
     },
 
     /**
-     * Upload user avatar to server
+     * Upload user avatar to server using presigned URL
      * @param imageUri - URI of the selected image
      * @returns URL of the uploaded avatar from server
      */
     async saveAvatar(imageUri: string): Promise<string> {
         try {
-            console.log('[UserProfile] Uploading avatar to server:', imageUri);
+            console.log('[UserProfile] Uploading avatar using presigned URL:', imageUri);
 
-            // Upload to server
-            const response = await apiService.uploadAvatar(imageUri);
-            const serverAvatarUrl = response.data;
+            // Upload to S3 using presigned URL
+            const serverAvatarUrl = await apiService.uploadAvatarWithPresignedUrl(imageUri);
 
             console.log('[UserProfile] Avatar uploaded, server URL:', serverAvatarUrl);
 

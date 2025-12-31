@@ -8,6 +8,7 @@ const bleManager = new BleManager();
 // Constants for packet sizes
 const HEALTH_PACKET_SIZE = 8;        // Basic HealthDataPacket (timestamp:4 + steps:2 + hr:1 + spo2:1)
 const HEALTH_PACKET_WITH_ALERT = 12; // HealthDataPacket (8 bytes) + AlertScore (float, 4 bytes)
+const HEALTH_PACKET_EXTENDED = 18;   // Full packet (12 bytes) + activityStatus (1) + sleepDuration (2) + reserved (3)
 
 /**
  * Helper functions to read from Uint8Array/Buffer (Little Endian)
@@ -191,16 +192,17 @@ export function parseHealthDataPacket(buffer: Uint8Array | Buffer): Omit<BLEHeal
 
 /**
  * Parse health data from BLE notification (base64 encoded)
- * Handles 3 cases:
+ * Handles 4 cases:
  * 1. 8 bytes: Normal packet (HealthDataPacket)
  * 2. 12 bytes: Packet with alert (HealthDataPacket + float AlertScore)
- * 3. N*8 bytes: Batch data (multiple HealthDataPackets)
+ * 3. 18 bytes: Extended packet (12 bytes + activityStatus + sleepDuration + reserved)
+ * 4. N*8 bytes: Batch data (multiple HealthDataPackets)
  * 
  * @param base64Value - Base64 encoded binary data from BLE
  * @returns Parsed data with appropriate type
  */
 export function parseHealthDataNotification(base64Value: string): {
-    type: 'single' | 'alert' | 'batch';
+    type: 'single' | 'alert' | 'extended' | 'batch';
     data: BLEHealthData | BLEBatchData;
 } | null {
     try {
@@ -240,7 +242,26 @@ export function parseHealthDataNotification(base64Value: string): {
             return { type: 'alert', data: healthData };
         }
 
-        // Case 3: Batch data (N * 8 bytes)
+        // Case 3: Extended packet (18 bytes) - with alert, activity status, and sleep duration
+        if (length === HEALTH_PACKET_EXTENDED) {
+            const packet = parseHealthDataPacket(buffer);
+            const alertScore = readFloatLE(buffer, 8);
+            const activityStatus = readUInt8(buffer, 12);
+            const sleepDurationMinutes = readUInt16LE(buffer, 13);
+            // Bytes 15-17 are reserved for future use
+
+            const healthData: BLEHealthData = {
+                ...packet,
+                alertScore,
+                activityStatus: activityStatus as 0 | 1 | 2 | 3,
+                sleepDurationMinutes,
+                timestampISO: new Date(packet.timestamp * 1000).toISOString(),
+            };
+            console.log('[BLE] Parsed extended packet:', healthData);
+            return { type: 'extended', data: healthData };
+        }
+
+        // Case 4: Batch data (N * 8 bytes)
         if (length % HEALTH_PACKET_SIZE === 0) {
             const count = length / HEALTH_PACKET_SIZE;
             const packets: BLEHealthData[] = [];

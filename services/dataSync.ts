@@ -1,6 +1,9 @@
-// Data Sync Service - Gom dữ liệu và gửi lên server mỗi 30 phút
+// Data Sync Service - Gom dữ liệu và gửi lên server mỗi 5 phút
 import { BLEHealthData } from '@/types';
+import { calculateActivityCalories } from '@/utils/calorieCalculator';
 import { apiService, HealthDataDto, HealthDataPoint } from './api';
+import { userProfileService } from './userProfileService';
+import { waterIntakeService } from './waterIntakeService';
 
 const SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes in milliseconds
 const MAX_BUFFER_SIZE = 1000; // Max records to hold in buffer
@@ -98,12 +101,22 @@ class DataSyncService {
         }
 
         // Convert BLEHealthData to HealthDataPoint format
+        // Get user profile for calorie calculation
+        const userProfile = await userProfileService.getProfile();
+        const userWeight = userProfile?.weightKg || 70; // Default weight if not available
+        
+        // Get current water intake total
+        const waterIntakeMl = await waterIntakeService.getTotalToday();
+        
         const dataPoints: HealthDataPoint[] = this.dataBuffer.map(data => ({
             timestamp: data.timestampISO,  // Use timestampISO (ISO string) instead of timestamp (unix)
             heartRate: data.heartRate,
             spo2: data.spo2,
             stepCount: data.steps,
-            caloriesBurned: 0, // Not available in new format
+            caloriesBurned: calculateActivityCalories(data.steps, data.activityStatus || 2, userWeight),
+            waterIntakeMl: waterIntakeMl, // Include total water intake for today
+            activityStatus: data.activityStatus, // Include activity status if available
+            sleepDurationMinutes: data.sleepDurationMinutes, // Include sleep duration if available
             alertScore: data.alertScore, // Include ML alert score if present
         }));
 

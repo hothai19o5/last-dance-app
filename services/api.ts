@@ -14,6 +14,7 @@ export const API_ENDPOINTS = {
     USER_DETAIL: '/user/me',
     USER_UPDATE: '/user',
     USER_AVATAR: '/user/avatar',
+    USER_PRESIGNED_URL: '/user/avatar/presigned-url', // New endpoint for presigned URL
 
     // Health Data
     HEALTH_DATA: '/sync/health-data',
@@ -56,6 +57,9 @@ export interface HealthDataPoint {
     spo2: number;
     stepCount: number;
     caloriesBurned: number;
+    waterIntakeMl?: number;         // Water intake in ml
+    activityStatus?: number;        // 0=sleeping, 1=resting, 2=walking, 3=running
+    sleepDurationMinutes?: number;  // Sleep duration in minutes
 }
 
 export interface HealthDataDto {
@@ -97,6 +101,12 @@ export interface UpdateUserRequest {
 
 export interface AvatarUploadResponse {
     imageUrl: string;
+}
+
+export interface PresignedUrlResponse {
+    presignedUrl: string;
+    objectUrl: string;
+    expiresIn: number;
 }
 
 export interface ApiError {
@@ -289,7 +299,7 @@ class ApiService {
     async postFormData<R>(endpoint: string, formData: FormData, requiresAuth: boolean = true): Promise<R> {
         const headers: HeadersInit = {};
         // Don't set Content-Type for FormData - browser will set it with boundary
-        
+
         if (requiresAuth) {
             const token = await authService.getAccessToken();
             if (token) {
@@ -376,27 +386,108 @@ class ApiService {
     }
 
     /**
-     * Upload user avatar
+     * Get presigned URL for avatar upload
+     * @param filename - Name of the file to upload
+     * @returns Presigned URL (string)
+     */
+    async getPresignedUrl(filename: string): Promise<string> {
+        console.log('[API] Requesting presigned URL for:', filename);
+        // Backend uses POST method with query parameter
+        const response = await this.post<null, ApiResponse<string>>(
+            `${API_ENDPOINTS.USER_PRESIGNED_URL}?fileName=${encodeURIComponent(filename)}`,
+            null, // No body needed, fileName is in query param
+            true // Requires authentication
+        );
+        return response.data;
+    }
+
+    /**
+     * Upload file to S3 using presigned URL
+     * @param presignedUrl - Presigned URL from backend
+     * @param fileUri - Local URI of the file to upload
+     * @returns true if successful
+     */
+    async uploadToS3(presignedUrl: string, fileUri: string): Promise<boolean> {
+        try {
+            console.log('[API] Uploading to S3:', fileUri);
+
+            // Read the file as blob
+            const response = await fetch(fileUri);
+            const blob = await response.blob();
+
+            // Upload to S3 using PUT
+            const uploadResponse = await fetch(presignedUrl, {
+                method: 'PUT',
+                body: blob,
+                headers: {
+                    'Content-Type': blob.type || 'image/jpeg',
+                },
+            });
+
+            if (!uploadResponse.ok) {
+                throw new Error(`S3 upload failed: ${uploadResponse.status}`);
+            }
+
+            console.log('[API] S3 upload successful');
+            return true;
+        } catch (error) {
+            console.error('[API] S3 upload error:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Upload user avatar using presigned URL flow
+     * @param imageUri - Local URI of the image to upload
+     * @returns URL of the uploaded avatar
+     */
+    async uploadAvatarWithPresignedUrl(imageUri: string): Promise<string> {
+        try {
+            console.log('[API] Starting presigned URL upload flow:', imageUri);
+
+            // Extract filename from URI
+            const uriParts = imageUri.split('/');
+            const filename = uriParts[uriParts.length - 1] || 'avatar.jpg';
+
+            // Step 1: Get presigned URL from backend (returns string directly)
+            const presignedUrl = await this.getPresignedUrl(filename);
+            console.log('[API] Received presigned URL');
+
+            // Step 2: Upload to S3
+            await this.uploadToS3(presignedUrl, imageUri);
+
+            // Step 3: Extract object URL from presigned URL (remove query parameters)
+            const objectUrl = presignedUrl.split('?')[0];
+            console.log('[API] Avatar uploaded successfully:', objectUrl);
+            return objectUrl;
+        } catch (error) {
+            console.error('[API] Presigned URL upload error:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Upload user avatar (legacy method - will be deprecated)
      * @param imageUri - Local URI of the image to upload
      * @returns URL of the uploaded avatar
      */
     async uploadAvatar(imageUri: string): Promise<ApiResponse<string>> {
         console.log('[API] Uploading avatar:', imageUri);
-        
+
         const formData = new FormData();
-        
+
         // Get file extension and mime type
         const uriParts = imageUri.split('.');
         const fileType = uriParts[uriParts.length - 1] || 'jpg';
         const mimeType = `image/${fileType === 'jpg' ? 'jpeg' : fileType}`;
-        
+
         // Append the file to form data
         formData.append('file', {
             uri: imageUri,
             name: `avatar.${fileType}`,
             type: mimeType,
         } as any);
-        
+
         return this.postFormData<ApiResponse<string>>(
             API_ENDPOINTS.USER_AVATAR,
             formData,

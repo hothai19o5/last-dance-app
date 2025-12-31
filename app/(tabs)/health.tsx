@@ -6,12 +6,15 @@ import { Animated, Dimensions, StyleSheet, Text, TouchableOpacity, View } from '
 import { BarChart, LineChart } from 'react-native-gifted-charts';
 import ActivityRings from '../../components/ActivityRings';
 import AddMenuToggle from '../../components/AddMenuToggle';
+import WaterIntakeModal from '../../components/WaterIntakeModal';
 import { useDevice } from '../../contexts/DeviceContext';
 import { useTheme, useThemeColors } from '../../contexts/ThemeContext';
 import { healthHistoryService } from '../../services/healthHistoryService';
 import { notificationSettingsService } from '../../services/notificationSettings';
 import { userProfileService } from '../../services/userProfileService';
+import { waterIntakeService } from '../../services/waterIntakeService';
 import { UserProfile } from '../../types';
+import { calculateActivityCalories, calculateMovingTime, getActivityLabel } from '../../utils/calorieCalculator';
 import { deviceToasts, showToast } from '../../utils/toast';
 
 const { width } = Dimensions.get('window');
@@ -22,18 +25,36 @@ export default function HealthScreen() {
     const { healthData, pendingSyncCount, forceSyncToServer } = useDevice();
     const fadeAnim = useRef(new Animated.Value(1)).current;
     const [showAddMenu, setShowAddMenu] = useState(false);
+    const [showWaterModal, setShowWaterModal] = useState(false);
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
     const [heartRateChartData, setHeartRateChartData] = useState<{ value: number }[]>([]);
     const [spO2ChartData, setSpO2ChartData] = useState<{ value: number }[]>([]);
     const [weightHistory, setWeightHistory] = useState<number[]>([]);
+    const [waterIntakeMl, setWaterIntakeMl] = useState(0);
 
     // Load user profile when screen comes into focus
     useFocusEffect(
         React.useCallback(() => {
             loadUserProfile();
             loadChartData();
+            loadWaterIntake();
         }, [])
     );
+
+    const loadWaterIntake = async () => {
+        const total = await waterIntakeService.getTotalToday();
+        setWaterIntakeMl(total);
+    };
+
+    const handleAddWater = async (amountMl: number) => {
+        try {
+            await waterIntakeService.addWater(amountMl);
+            await loadWaterIntake();
+            showToast.success('Water Added', `Added ${amountMl}ml to your daily intake`);
+        } catch (error) {
+            showToast.error('Error', 'Failed to add water intake');
+        }
+    };
 
     const loadUserProfile = async () => {
         const profile = await userProfileService.getProfile();
@@ -76,14 +97,24 @@ export default function HealthScreen() {
     // Health goals
     const caloriesGoal = 200;
     const stepsGoal = 2000;
-    const waterIntakeGoal = 2;
+    const waterIntakeGoal = 2000; // 2000ml = 2L
 
     // Use real data from device, default to 0 if no data
     const heartRate = healthData?.heartRate || 0;
     const spo2 = healthData?.spo2 || 0;
     const currentSteps = healthData?.steps || 0;
-    const currentCalories = 0;
-    const currentWaterIntake = 0;
+    const activityStatus = healthData?.activityStatus || 2; // Default to walking
+
+    // Calculate calories based on steps and activity
+    const currentCalories = calculateActivityCalories(
+        currentSteps,
+        activityStatus,
+        userProfile?.weightKg || 70
+    );
+
+    // Calculate moving time based on steps and activity
+    const movingMinutes = calculateMovingTime(currentSteps, activityStatus);
+
     const alertScore = healthData?.alertScore;
     const userWeight = userProfile?.weightKg || null;
 
@@ -133,7 +164,7 @@ export default function HealthScreen() {
     // Calculate overall completion percentage
     const caloriesPercent = (currentCalories / caloriesGoal) * 100;
     const stepsPercent = (currentSteps / stepsGoal) * 100;
-    const waterIntakePercent = (currentWaterIntake / waterIntakeGoal) * 100;
+    const waterIntakePercent = (waterIntakeMl / waterIntakeGoal) * 100;
 
     // Calculate cookies earned (1 cookie per 50 calories)
     const cookiesEarned = Math.floor(currentCalories / 50);
@@ -173,7 +204,7 @@ export default function HealthScreen() {
             icon: 'water' as const,
             iconColor: colors.waterIntakeColor,
             title: 'Log Water Intake',
-            onPress: () => showToast.info('Feature coming soon'),
+            onPress: () => setShowWaterModal(true),
         },
         {
             icon: 'restaurant' as const,
@@ -268,8 +299,8 @@ export default function HealthScreen() {
                         icon="water"
                         iconColor={colors.waterIntakeColor}
                         label="Water Intake"
-                        value={currentWaterIntake}
-                        unit=" L"
+                        value={waterIntakeMl}
+                        unit=" ml"
                         goal={waterIntakeGoal}
                         colors={colors}
                     />
@@ -281,7 +312,9 @@ export default function HealthScreen() {
                         <View style={[styles.circleIcon, { backgroundColor: colors.info }]}>
                             <Ionicons name="person" size={12} color={colors.iconOnColor} />
                         </View>
-                        <Text style={[styles.movingText, { color: colors.text }]}>Moving 0 mins</Text>
+                        <Text style={[styles.movingText, { color: colors.text }]}>
+                            Moving {movingMinutes} mins {activityStatus !== undefined && activityStatus > 1 ? `(${getActivityLabel(activityStatus)})` : ''}
+                        </Text>
                     </View>
                 </TouchableOpacity>
 
@@ -417,6 +450,13 @@ export default function HealthScreen() {
                 onClose={() => setShowAddMenu(false)}
                 menuItems={menuItems}
                 title="Add Health Data"
+            />
+
+            {/* Water Intake Modal */}
+            <WaterIntakeModal
+                visible={showWaterModal}
+                onClose={() => setShowWaterModal(false)}
+                onAddWater={handleAddWater}
             />
         </Animated.ScrollView>
     );
