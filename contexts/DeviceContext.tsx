@@ -103,7 +103,13 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                 device.id,
                 // Callback for single readings/alerts
                 async (data: BLEHealthData) => {
-                    console.log('[DeviceContext] Received health data:', data);
+                    console.log('[DeviceContext] ========== RECEIVED HEALTH DATA ==========');
+                    console.log('[DeviceContext] Timestamp:', data.timestampISO);
+                    console.log('[DeviceContext] HR:', data.heartRate, 'SpO2:', data.spo2, 'Steps:', data.steps);
+                    console.log('[DeviceContext] Activity:', data.activityStatus, 'Sleep:', data.sleepDurationMinutes);
+                    console.log('[DeviceContext] Alert Score:', data.alertScore);
+                    console.log('[DeviceContext] ===============================================');
+
                     setHealthData(data);
 
                     // Save to health history for charts
@@ -291,6 +297,16 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                 if (targetDevice) {
                     const updatedDevice = { ...targetDevice, connected: true };
                     await setDevice(updatedDevice);
+
+                    // CRITICAL: Send user profile (includes time sync and config)
+                    console.log('[DeviceContext] Sending user profile to reconnected device...');
+                    const profileSent = await sendUserProfileToDevice(deviceId);
+                    if (profileSent) {
+                        console.log('[DeviceContext] ✅ User profile sent to reconnected device');
+                    } else {
+                        console.warn('[DeviceContext] ⚠️ Failed to send user profile to reconnected device');
+                    }
+
                     return true;
                 }
             }
@@ -345,6 +361,15 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         try {
             console.log('[DeviceContext] Sending user profile to device...');
 
+            // CRITICAL: Sync time first (mandatory for correct timestamps)
+            console.log('[DeviceContext] Step 1: Syncing time...');
+            const timeSynced = await BLEService.syncTime(deviceId);
+            if (!timeSynced) {
+                console.error('[DeviceContext] ⚠️ Time sync failed! Timestamps will be incorrect.');
+            } else {
+                console.log('[DeviceContext] ✅ Time synced successfully');
+            }
+
             // Get user profile from storage
             const profile = await userProfileService.getProfile();
             if (!profile) {
@@ -364,7 +389,7 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                 mlEnable: 1,      // 1: Enable AI anomaly detection
             };
 
-            console.log('[DeviceContext] Sending config:', bleConfig);
+            console.log('[DeviceContext] Step 2: Sending config:', bleConfig);
 
             // Write config to device
             const success = await BLEService.writeConfig(deviceId, bleConfig);

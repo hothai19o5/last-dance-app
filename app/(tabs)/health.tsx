@@ -91,6 +91,8 @@ export default function HealthScreen() {
 
     // Reload chart data when health data changes
     useEffect(() => {
+        console.log('[Health] Health data updated:', healthData);
+        console.log('[Health] HR:', healthData?.heartRate, 'SpO2:', healthData?.spo2, 'Steps:', healthData?.steps);
         loadChartData();
     }, [healthData, userProfile?.weightKg]);
 
@@ -100,10 +102,13 @@ export default function HealthScreen() {
     const waterIntakeGoal = 2000; // 2000ml = 2L
 
     // Use real data from device, default to 0 if no data
-    const heartRate = healthData?.heartRate || 0;
-    const spo2 = healthData?.spo2 || 0;
-    const currentSteps = healthData?.steps || 0;
-    const activityStatus = healthData?.activityStatus || 2; // Default to walking
+    // Force re-computation by directly reading from healthData
+    const heartRate = healthData?.heartRate ?? 0;
+    const spo2 = healthData?.spo2 ?? 0;
+    const currentSteps = healthData?.steps ?? 0;
+    const activityStatus = healthData?.activityStatus ?? 2; // Default to walking
+
+    console.log('[Health] Rendering with:', { heartRate, spo2, currentSteps, activityStatus });
 
     // Calculate calories based on steps and activity
     const currentCalories = calculateActivityCalories(

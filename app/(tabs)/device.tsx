@@ -343,6 +343,14 @@ export default function DeviceScreen() {
             {/* Settings List */}
             <View style={[styles.settingsList, { backgroundColor: colors.cardBackground }]}>
                 <SettingItem
+                    icon="settings-outline"
+                    iconColor={colors.tint}
+                    title="Device Settings"
+                    onPress={() => router.push('/device-settings')}
+                    colors={colors}
+                    disabled={!isConnected}
+                />
+                <SettingItem
                     icon="notifications"
                     iconColor={colors.warning}
                     title="Notifications and calls"
@@ -399,9 +407,10 @@ interface SettingItemProps {
     title: string;
     onPress: () => void;
     colors?: any;
+    disabled?: boolean;
 }
 
-const SettingItem: React.FC<SettingItemProps> = ({ icon, iconColor, title, onPress, colors }) => {
+const SettingItem: React.FC<SettingItemProps> = ({ icon, iconColor, title, onPress, colors, disabled = false }) => {
     const themeColors = colors || useThemeColors();
     return (
         <TouchableOpacity
@@ -409,10 +418,12 @@ const SettingItem: React.FC<SettingItemProps> = ({ icon, iconColor, title, onPre
                 styles.settingItem,
                 {
                     backgroundColor: themeColors.cardBackground,
-                    borderBottomColor: themeColors.divider
+                    borderBottomColor: themeColors.divider,
+                    opacity: disabled ? 0.5 : 1
                 }
             ]}
             onPress={onPress}
+            disabled={disabled}
         >
             <View style={styles.settingLeft}>
                 <View style={[styles.settingIconContainer, { backgroundColor: iconColor }]}>

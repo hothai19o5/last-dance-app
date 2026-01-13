@@ -6,9 +6,20 @@ import { BLEBatchData, BLEHealthData } from '../types';
 const bleManager = new BleManager();
 
 // Constants for packet sizes
-const HEALTH_PACKET_SIZE = 8;        // Basic HealthDataPacket (timestamp:4 + steps:2 + hr:1 + spo2:1)
-const HEALTH_PACKET_WITH_ALERT = 12; // HealthDataPacket (8 bytes) + AlertScore (float, 4 bytes)
-const HEALTH_PACKET_EXTENDED = 18;   // Full packet (12 bytes) + activityStatus (1) + sleepDuration (2) + reserved (3)
+// UNIFIED: Only one packet type - HealthDataPacket (18 bytes)
+const HEALTH_PACKET_SIZE = 18;       // HealthDataPacket: timestamp(4) + steps(2) + hr(1) + spo2(1) + alertScore(4) + activityStatus(1) + sleepDuration(2) + reserved(3)
+const BATCH_HEADER_SIZE = 4;         // Batch chunk header: chunkIndex(1) + totalChunks(1) + totalPackets(2)
+
+// Batch chunk accumulator for reassembly
+interface BatchChunkState {
+    totalChunks: number;
+    totalPackets: number;
+    receivedChunks: Map<number, BLEHealthData[]>;
+    lastReceiveTime: number;
+}
+
+let batchChunkState: BatchChunkState | null = null;
+const BATCH_TIMEOUT_MS = 10000; // 10 seconds timeout for batch reassembly
 
 /**
  * Helper functions to read from Uint8Array/Buffer (Little Endian)
@@ -161,18 +172,22 @@ export function parseBatteryLevel(base64Value: string): number {
 }
 
 /**
- * Parse a single HealthDataPacket (8 bytes) - Little Endian
+ * Parse a single HealthDataPacket (18 bytes) - Little Endian
  * 
- * Packet structure:
+ * UNIFIED Packet structure (18 bytes):
  * - Offset 0-3: timestamp (uint32) - Unix Timestamp
  * - Offset 4-5: steps (uint16) - Total step count
  * - Offset 6: hr (uint8) - Heart rate in BPM
  * - Offset 7: spo2 (uint8) - SpO2 percentage
+ * - Offset 8-11: alertScore (float) - ML alert score (0.0-1.0)
+ * - Offset 12: activityStatus (uint8) - Activity (0=Still, 1=Walking, 2=Running, 3=Sleeping)
+ * - Offset 13-14: sleepDurationMinutes (uint16) - Sleep duration in minutes
+ * - Offset 15-17: reserved (3 bytes)
  * 
- * @param buffer - Buffer containing exactly 8 bytes
- * @returns Parsed health data (without alertScore)
+ * @param buffer - Buffer containing exactly 18 bytes
+ * @returns Parsed health data
  */
-export function parseHealthDataPacket(buffer: Uint8Array | Buffer): Omit<BLEHealthData, 'alertScore' | 'timestampISO'> {
+export function parseHealthDataPacket(buffer: Uint8Array | Buffer): BLEHealthData {
     if (buffer.length < HEALTH_PACKET_SIZE) {
         throw new Error(`Invalid packet size: ${buffer.length}, expected ${HEALTH_PACKET_SIZE}`);
     }
@@ -181,28 +196,34 @@ export function parseHealthDataPacket(buffer: Uint8Array | Buffer): Omit<BLEHeal
     const steps = readUInt16LE(buffer, 4);
     const heartRate = readUInt8(buffer, 6);
     const spo2 = readUInt8(buffer, 7);
+    const alertScore = readFloatLE(buffer, 8);
+    const activityStatus = readUInt8(buffer, 12);
+    const sleepDurationMinutes = readUInt16LE(buffer, 13);
 
     return {
         timestamp,
         steps,
         heartRate,
         spo2,
+        alertScore,
+        activityStatus: activityStatus as 0 | 1 | 2 | 3,
+        sleepDurationMinutes,
+        timestampISO: new Date(timestamp * 1000).toISOString(),
     };
 }
 
 /**
  * Parse health data from BLE notification (base64 encoded)
- * Handles 4 cases:
- * 1. 8 bytes: Normal packet (HealthDataPacket)
- * 2. 12 bytes: Packet with alert (HealthDataPacket + float AlertScore)
- * 3. 18 bytes: Extended packet (12 bytes + activityStatus + sleepDuration + reserved)
- * 4. N*8 bytes: Batch data (multiple HealthDataPackets)
+ * 
+ * UNIFIED: Device always sends 18-byte HealthDataPacket
+ * - Single packet: 18 bytes
+ * - Batch: Header (4 bytes) + N * 18 bytes
  * 
  * @param base64Value - Base64 encoded binary data from BLE
  * @returns Parsed data with appropriate type
  */
 export function parseHealthDataNotification(base64Value: string): {
-    type: 'single' | 'alert' | 'extended' | 'batch';
+    type: 'single' | 'batch';
     data: BLEHealthData | BLEBatchData;
 } | null {
     try {
@@ -216,66 +237,94 @@ export function parseHealthDataNotification(base64Value: string): {
 
         console.log(`[BLE] Received ${length} bytes`);
 
-        // Case 1: Single packet (8 bytes)
+        // Case 1: Single packet (18 bytes)
         if (length === HEALTH_PACKET_SIZE) {
-            const packet = parseHealthDataPacket(buffer);
-            const healthData: BLEHealthData = {
-                ...packet,
-                alertScore: null,
-                timestampISO: new Date(packet.timestamp * 1000).toISOString(),
-            };
+            const healthData = parseHealthDataPacket(buffer);
             console.log('[BLE] Parsed single packet:', healthData);
             return { type: 'single', data: healthData };
         }
 
-        // Case 2: Packet with alert (12 bytes)
-        if (length === HEALTH_PACKET_WITH_ALERT) {
-            const packet = parseHealthDataPacket(buffer);
-            const alertScore = readFloatLE(buffer, 8);
+        // Case 2: Chunked batch data with header
+        // Format: [chunkIndex(1), totalChunks(1), totalPackets(2)] + N * 18 bytes
+        const dataLengthAfterHeader = length - BATCH_HEADER_SIZE;
+        if (length > BATCH_HEADER_SIZE && dataLengthAfterHeader % HEALTH_PACKET_SIZE === 0) {
+            // Parse header
+            const chunkIndex = readUInt8(buffer, 0);
+            const totalChunks = readUInt8(buffer, 1);
+            const totalPackets = readUInt16LE(buffer, 2);
+            const packetsInChunk = dataLengthAfterHeader / HEALTH_PACKET_SIZE;
 
-            const healthData: BLEHealthData = {
-                ...packet,
-                alertScore,
-                timestampISO: new Date(packet.timestamp * 1000).toISOString(),
-            };
-            console.log('[BLE] Parsed alert packet:', healthData);
-            return { type: 'alert', data: healthData };
+            console.log(`[BLE] Received chunk ${chunkIndex + 1}/${totalChunks} with ${packetsInChunk} packets (total: ${totalPackets})`);
+
+            // Parse packets in this chunk
+            const chunkPackets: BLEHealthData[] = [];
+            for (let i = 0; i < packetsInChunk; i++) {
+                const offset = BATCH_HEADER_SIZE + i * HEALTH_PACKET_SIZE;
+                const packetBuffer = buffer.subarray(offset, offset + HEALTH_PACKET_SIZE);
+                const healthData = parseHealthDataPacket(packetBuffer);
+                chunkPackets.push(healthData);
+            }
+
+            // Initialize or reset state if needed
+            const now = Date.now();
+            if (!batchChunkState ||
+                batchChunkState.totalPackets !== totalPackets ||
+                now - batchChunkState.lastReceiveTime > BATCH_TIMEOUT_MS) {
+                batchChunkState = {
+                    totalChunks,
+                    totalPackets,
+                    receivedChunks: new Map(),
+                    lastReceiveTime: now,
+                };
+            }
+
+            // Store this chunk
+            batchChunkState.receivedChunks.set(chunkIndex, chunkPackets);
+            batchChunkState.lastReceiveTime = now;
+
+            // Check if all chunks received
+            if (batchChunkState.receivedChunks.size === totalChunks) {
+                console.log(`[BLE] All ${totalChunks} chunks received, reassembling...`);
+
+                // Reassemble in order
+                const allPackets: BLEHealthData[] = [];
+                for (let i = 0; i < totalChunks; i++) {
+                    const chunk = batchChunkState.receivedChunks.get(i);
+                    if (chunk) {
+                        allPackets.push(...chunk);
+                    }
+                }
+
+                const batchData: BLEBatchData = {
+                    packets: allPackets,
+                    count: allPackets.length,
+                };
+
+                console.log(`[BLE] Reassembled batch: ${allPackets.length} packets`);
+
+                // Reset state
+                batchChunkState = null;
+
+                return { type: 'batch', data: batchData };
+            } else {
+                console.log(`[BLE] Waiting for more chunks: ${batchChunkState.receivedChunks.size}/${totalChunks}`);
+                // Return null to indicate we're still accumulating
+                return null;
+            }
         }
 
-        // Case 3: Extended packet (18 bytes) - with alert, activity status, and sleep duration
-        if (length === HEALTH_PACKET_EXTENDED) {
-            const packet = parseHealthDataPacket(buffer);
-            const alertScore = readFloatLE(buffer, 8);
-            const activityStatus = readUInt8(buffer, 12);
-            const sleepDurationMinutes = readUInt16LE(buffer, 13);
-            // Bytes 15-17 are reserved for future use
-
-            const healthData: BLEHealthData = {
-                ...packet,
-                alertScore,
-                activityStatus: activityStatus as 0 | 1 | 2 | 3,
-                sleepDurationMinutes,
-                timestampISO: new Date(packet.timestamp * 1000).toISOString(),
-            };
-            console.log('[BLE] Parsed extended packet:', healthData);
-            return { type: 'extended', data: healthData };
-        }
-
-        // Case 4: Batch data (N * 8 bytes)
-        if (length % HEALTH_PACKET_SIZE === 0) {
+        // Case 3: Legacy batch data (N * 18 bytes without header) - for backward compatibility
+        if (length % HEALTH_PACKET_SIZE === 0 && length > HEALTH_PACKET_SIZE) {
             const count = length / HEALTH_PACKET_SIZE;
             const packets: BLEHealthData[] = [];
+
+            console.log(`[BLE] Parsing legacy batch: ${count} packets (${length} bytes total)`);
 
             for (let i = 0; i < count; i++) {
                 const offset = i * HEALTH_PACKET_SIZE;
                 const packetBuffer = buffer.subarray(offset, offset + HEALTH_PACKET_SIZE);
-                const packet = parseHealthDataPacket(packetBuffer);
-
-                packets.push({
-                    ...packet,
-                    alertScore: null,
-                    timestampISO: new Date(packet.timestamp * 1000).toISOString(),
-                });
+                const healthData = parseHealthDataPacket(packetBuffer);
+                packets.push(healthData);
             }
 
             const batchData: BLEBatchData = {
@@ -283,12 +332,86 @@ export function parseHealthDataNotification(base64Value: string): {
                 count,
             };
 
-            console.log('[BLE] Parsed batch data:', count, 'packets');
+            console.log('[BLE] Parsed legacy batch data:', count, 'packets');
             return { type: 'batch', data: batchData };
         }
 
-        // Invalid packet size
-        console.error('[BLE] Invalid packet size:', length);
+        // Case 4: Batch chunk with incomplete data due to MTU limitation
+        // If we have header and at least one complete packet, parse what we can
+        if (length > BATCH_HEADER_SIZE + HEALTH_PACKET_SIZE) {
+            const dataLength = length - BATCH_HEADER_SIZE;
+            const completePackets = Math.floor(dataLength / HEALTH_PACKET_SIZE);
+            const remainingBytes = dataLength % HEALTH_PACKET_SIZE;
+
+            if (completePackets > 0) {
+                // Parse header
+                const chunkIndex = readUInt8(buffer, 0);
+                const totalChunks = readUInt8(buffer, 1);
+                const totalPackets = readUInt16LE(buffer, 2);
+
+                console.warn(`[BLE] Received truncated chunk: ${length} bytes, parsing ${completePackets} complete packets (${remainingBytes} bytes discarded)`);
+                console.log(`[BLE] Chunk ${chunkIndex + 1}/${totalChunks}, expected total: ${totalPackets} packets`);
+
+                // Parse complete packets only
+                const chunkPackets: BLEHealthData[] = [];
+                for (let i = 0; i < completePackets; i++) {
+                    const offset = BATCH_HEADER_SIZE + i * HEALTH_PACKET_SIZE;
+                    const packetBuffer = buffer.subarray(offset, offset + HEALTH_PACKET_SIZE);
+                    const healthData = parseHealthDataPacket(packetBuffer);
+                    chunkPackets.push(healthData);
+                }
+
+                // Initialize or reset state if needed
+                const now = Date.now();
+                if (!batchChunkState ||
+                    batchChunkState.totalPackets !== totalPackets ||
+                    now - batchChunkState.lastReceiveTime > BATCH_TIMEOUT_MS) {
+                    batchChunkState = {
+                        totalChunks,
+                        totalPackets,
+                        receivedChunks: new Map(),
+                        lastReceiveTime: now,
+                    };
+                }
+
+                // Store this chunk (with partial data)
+                batchChunkState.receivedChunks.set(chunkIndex, chunkPackets);
+                batchChunkState.lastReceiveTime = now;
+
+                // Check if all chunks received
+                if (batchChunkState.receivedChunks.size === totalChunks) {
+                    console.log(`[BLE] All ${totalChunks} chunks received (some may be truncated), reassembling...`);
+
+                    // Reassemble in order
+                    const allPackets: BLEHealthData[] = [];
+                    for (let i = 0; i < totalChunks; i++) {
+                        const chunk = batchChunkState.receivedChunks.get(i);
+                        if (chunk) {
+                            allPackets.push(...chunk);
+                        }
+                    }
+
+                    const batchData: BLEBatchData = {
+                        packets: allPackets,
+                        count: allPackets.length,
+                    };
+
+                    console.log(`[BLE] Reassembled batch: ${allPackets.length}/${totalPackets} packets recovered`);
+
+                    // Reset state
+                    batchChunkState = null;
+
+                    return { type: 'batch', data: batchData };
+                } else {
+                    console.log(`[BLE] Waiting for more chunks: ${batchChunkState.receivedChunks.size}/${totalChunks}`);
+                    return null;
+                }
+            }
+        }
+
+        // Invalid packet size - can't parse
+        console.error('[BLE] Invalid packet size:', length, 'bytes. Expected 18 (single), 4+N*18 (batch chunk), or N*18 (legacy batch)');
+        console.error('[BLE] Data (hex):', buffer.toString('hex').substring(0, 40) + '...');
         return null;
 
     } catch (error) {

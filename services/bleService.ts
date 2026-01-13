@@ -145,13 +145,18 @@ export class BLEService {
       // CRITICAL: Request MTU 512 bytes (required for batch data)
       if (Platform.OS === 'android') {
         try {
-          const mtu = await device.requestMTU(REQUIRED_MTU);
+          const deviceWithMtu = await device.requestMTU(REQUIRED_MTU);
+          const mtu = deviceWithMtu.mtu || 23;
           console.log(`[BLE] MTU set to: ${mtu} bytes`);
+          if (mtu < REQUIRED_MTU) {
+            console.warn(`[BLE] ⚠️ MTU ${mtu} is less than required ${REQUIRED_MTU} bytes. Batch data may be truncated!`);
+          }
         } catch (error) {
-          console.warn('[BLE] MTU request failed (may use default):', error);
+          console.warn('[BLE] MTU request failed (may use default ~23 bytes):', error);
+          console.warn('[BLE] ⚠️ Batch mode may not work correctly with default MTU!');
         }
       } else {
-        console.log('[BLE] iOS: MTU is automatically managed');
+        console.log('[BLE] iOS: MTU is automatically managed (usually 185-512 bytes)');
       }
 
       // CRITICAL: Perform Time Sync immediately after connection
@@ -402,8 +407,12 @@ export class BLEService {
       // Request MTU if not already done (Android only)
       if (Platform.OS === 'android') {
         try {
-          const mtu = await device.requestMTU(REQUIRED_MTU);
+          const deviceWithMtu = await device.requestMTU(REQUIRED_MTU);
+          const mtu = deviceWithMtu.mtu || 23;
           console.log(`[BLE] MTU set to: ${mtu} bytes`);
+          if (mtu < REQUIRED_MTU) {
+            console.warn(`[BLE] ⚠️ MTU ${mtu} < ${REQUIRED_MTU}. Batch chunks may be truncated (max ~${Math.floor((mtu - 7) / 18)} packets per chunk)`);
+          }
         } catch (error) {
           console.log('[BLE] MTU request skipped (may already be set)');
         }
@@ -423,22 +432,25 @@ export class BLEService {
           }
 
           if (characteristic?.value) {
-            // Parse binary data (10, 14, or N*10 bytes)
+            // Parse binary data (18 bytes single or batch with header)
             const parsed = parseHealthDataNotification(characteristic.value);
 
             if (!parsed) {
-              console.warn('[BLE] Failed to parse notification');
+              // null means we're waiting for more batch chunks
+              console.log('[BLE] Waiting for more batch chunks...');
               return;
             }
 
-            // Handle different packet types
-            if (parsed.type === 'single' || parsed.type === 'alert') {
-              // Single packet or alert
+            console.log('[BLE] Parsed type:', parsed.type);
+
+            // Handle packet types (unified to 'single' and 'batch' only)
+            if (parsed.type === 'single') {
+              // Single packet (18 bytes)
               const healthData = parsed.data as BLEHealthData;
-              console.log('[BLE] Received health data:', healthData);
+              console.log('[BLE] Calling onDataReceived with:', healthData);
               onDataReceived(healthData);
             } else if (parsed.type === 'batch') {
-              // Batch data (multiple packets)
+              // Batch data (multiple 18-byte packets)
               const batchData = parsed.data as BLEBatchData;
               console.log('[BLE] Received batch data:', batchData.count, 'packets');
 
@@ -448,6 +460,8 @@ export class BLEService {
                 // If no batch handler, send each packet individually
                 batchData.packets.forEach(packet => onDataReceived(packet));
               }
+            } else {
+              console.warn('[BLE] Unknown packet type:', parsed.type);
             }
           }
         }
