@@ -24,12 +24,16 @@ export default function SpO2StatsScreen() {
         setLoading(true);
         try {
             const data = await statisticsService.getSpO2Stats(range);
-            setChartData(data.chartData);
-            setAverage(data.average);
-            setMin(data.min);
-            setMax(data.max);
+            setChartData(data?.chartData ?? []);
+            setAverage(data?.average ?? 0);
+            setMin(data?.min ?? 0);
+            setMax(data?.max ?? 0);
         } catch (error) {
             console.error('Failed to load SpO2 stats:', error);
+            setChartData([]);
+            setAverage(0);
+            setMin(0);
+            setMax(0);
         } finally {
             setLoading(false);
         }

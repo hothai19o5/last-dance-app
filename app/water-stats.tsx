@@ -25,12 +25,16 @@ export default function WaterStatsScreen() {
         setLoading(true);
         try {
             const data = await statisticsService.getWaterStats(range);
-            setChartData(data.chartData);
-            setAverage(data.average);
-            setTotal(data.total);
-            setMax(data.max);
+            setChartData(data?.chartData ?? []);
+            setAverage(data?.average ?? 0);
+            setTotal(data?.total ?? 0);
+            setMax(data?.max ?? 0);
         } catch (error) {
             console.error('Failed to load water stats:', error);
+            setChartData([]);
+            setAverage(0);
+            setTotal(0);
+            setMax(0);
         } finally {
             setLoading(false);
         }

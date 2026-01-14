@@ -9,6 +9,19 @@ export interface StatisticsData {
 }
 
 /**
+ * Normalize statistics data to ensure all fields have valid values
+ */
+function normalizeStats(data: Partial<StatisticsData> | null | undefined): StatisticsData {
+    return {
+        chartData: data?.chartData ?? [],
+        average: data?.average ?? 0,
+        total: data?.total ?? 0,
+        max: data?.max ?? 0,
+        min: data?.min ?? 0,
+    };
+}
+
+/**
  * Service for fetching health statistics from backend
  */
 class StatisticsService {
@@ -21,7 +34,7 @@ class StatisticsService {
                 `/health-data/statistics?metric=calories&range=${range}`,
                 true
             );
-            return response;
+            return normalizeStats(response);
         } catch (error) {
             console.error('Failed to fetch calories stats:', error);
             return this.getEmptyStats();
@@ -37,7 +50,7 @@ class StatisticsService {
                 `/health-data/statistics?metric=steps&range=${range}`,
                 true
             );
-            return response;
+            return normalizeStats(response);
         } catch (error) {
             console.error('Failed to fetch steps stats:', error);
             return this.getEmptyStats();
@@ -53,7 +66,7 @@ class StatisticsService {
                 `/health-data/statistics?metric=water&range=${range}`,
                 true
             );
-            return response;
+            return normalizeStats(response);
         } catch (error) {
             console.error('Failed to fetch water stats:', error);
             return this.getEmptyStats();
@@ -69,7 +82,7 @@ class StatisticsService {
                 `/health-data/statistics?metric=hr&range=${range}`,
                 true
             );
-            return response;
+            return normalizeStats(response);
         } catch (error) {
             console.error('Failed to fetch heart rate stats:', error);
             return this.getEmptyStats();
@@ -85,7 +98,7 @@ class StatisticsService {
                 `/health-data/statistics?metric=spo2&range=${range}`,
                 true
             );
-            return response;
+            return normalizeStats(response);
         } catch (error) {
             console.error('Failed to fetch SpO2 stats:', error);
             return this.getEmptyStats();
@@ -101,7 +114,7 @@ class StatisticsService {
                 `/health-data/statistics?metric=sleep&range=${range}`,
                 true
             );
-            return response;
+            return normalizeStats(response);
         } catch (error) {
             console.error('Failed to fetch sleep stats:', error);
             return this.getEmptyStats();
@@ -117,7 +130,7 @@ class StatisticsService {
                 `/health-data/statistics?metric=weight&range=${range}`,
                 true
             );
-            return response;
+            return normalizeStats(response);
         } catch (error) {
             console.error('Failed to fetch weight stats:', error);
             return this.getEmptyStats();

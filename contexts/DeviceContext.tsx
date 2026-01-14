@@ -1,4 +1,5 @@
 // Device Context - Quản lý thiết bị và health data
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
 import { apiService } from '../services/api';
 import { BLEService } from '../services/bleService';
@@ -7,6 +8,8 @@ import { DeviceStorage } from '../services/deviceStorage';
 import { healthHistoryService } from '../services/healthHistoryService';
 import { userProfileService } from '../services/userProfileService';
 import { BLEBatchData, BLEConfig, BLEHealthData, WearableDevice } from '../types';
+
+const DEVICE_CONFIG_KEY = '@device_config';
 
 interface DeviceContextType {
     device: WearableDevice | null;
@@ -356,6 +359,7 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
     /**
      * Gửi thông tin user profile xuống thiết bị IoT sau khi kết nối BLE
+     * Đọc config đã lưu từ device settings (nếu có)
      */
     const sendUserProfileToDevice = async (deviceId: string): Promise<boolean> => {
         try {
@@ -381,15 +385,30 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             const weight = profile?.weight || 65;
             const bmi = weight / (height * height);
 
-            // Prepare BLE config with new characteristics
+            // Try to load saved device config from device settings
+            let savedConfig: { dataMode?: number; stepEnable?: number; mlEnable?: number } | null = null;
+            try {
+                const savedConfigStr = await AsyncStorage.getItem(DEVICE_CONFIG_KEY);
+                if (savedConfigStr) {
+                    savedConfig = JSON.parse(savedConfigStr);
+                    console.log('[DeviceContext] Loaded saved device config:', savedConfig);
+                }
+            } catch (configError) {
+                console.warn('[DeviceContext] Could not load saved config:', configError);
+            }
+
+            // Prepare BLE config - use saved values if available, otherwise defaults
             const bleConfig: BLEConfig = {
                 bmi: parseFloat(bmi.toFixed(2)), // Round to 2 decimal places
-                dataMode: 0,      // 0: Realtime (default), 1: Batch
-                stepEnable: 1,    // 1: Enable step counting
-                mlEnable: 1,      // 1: Enable AI anomaly detection
+                dataMode: savedConfig?.dataMode ?? 0,      // 0: Realtime (default), 1: Batch
+                stepEnable: savedConfig?.stepEnable ?? 1,  // 1: Enable step counting
+                mlEnable: savedConfig?.mlEnable ?? 1,      // 1: Enable AI anomaly detection
             };
 
             console.log('[DeviceContext] Step 2: Sending config:', bleConfig);
+            console.log('[DeviceContext]   - Data Mode:', bleConfig.dataMode === 0 ? 'Realtime' : 'Batch');
+            console.log('[DeviceContext]   - Step Counting:', bleConfig.stepEnable === 1 ? 'ON' : 'OFF');
+            console.log('[DeviceContext]   - ML Detection:', bleConfig.mlEnable === 1 ? 'ON' : 'OFF');
 
             // Write config to device
             const success = await BLEService.writeConfig(deviceId, bleConfig);

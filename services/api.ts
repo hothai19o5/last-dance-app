@@ -2,7 +2,8 @@
 import { authService } from "./authService";
 
 // API Base URL - Update this to your actual server URL
-const API_BASE_URL = 'https://hoxuanthai.id.vn/api/v1';
+// const API_BASE_URL = 'https://hoxuanthai.id.vn/api/v1';
+const API_BASE_URL = 'http://192.168.0.111:8080/api/v1';
 
 // API Endpoints
 export const API_ENDPOINTS = {
@@ -60,6 +61,7 @@ export interface HealthDataPoint {
     waterIntakeMl?: number;         // Water intake in ml
     activityStatus?: number;        // 0=sleeping, 1=resting, 2=walking, 3=running
     sleepDurationMinutes?: number;  // Sleep duration in minutes
+    alertScore?: number | null;     // ML alert score (0-1), null if not available
 }
 
 export interface HealthDataDto {
