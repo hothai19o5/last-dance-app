@@ -2,8 +2,8 @@
 import { authService } from "./authService";
 
 // API Base URL - Update this to your actual server URL
-// const API_BASE_URL = 'https://hoxuanthai.id.vn/api/v1';
-const API_BASE_URL = 'http://192.168.0.111:8080/api/v1';
+const API_BASE_URL = 'https://hoxuanthai.id.vn/api/v1';
+// const API_BASE_URL = 'http://10.39.142.59:8080/api/v1';
 
 // API Endpoints
 export const API_ENDPOINTS = {

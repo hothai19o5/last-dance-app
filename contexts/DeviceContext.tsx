@@ -61,29 +61,67 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         return () => clearInterval(checkInterval);
     }, []);
 
+    // Helper function to check if BLE is ready (permissions + bluetooth state)
+    const isBLEReady = async (): Promise<boolean> => {
+        try {
+            // Check permissions first
+            const hasPermissions = await BLEService.requestPermissions();
+            if (!hasPermissions) {
+                console.log('[DeviceContext] BLE permissions not granted');
+                return false;
+            }
+
+            // Check Bluetooth state
+            const isEnabled = await BLEService.checkBluetoothState();
+            if (!isEnabled) {
+                console.log('[DeviceContext] Bluetooth is disabled');
+                return false;
+            }
+
+            return true;
+        } catch (error) {
+            console.error('[DeviceContext] Error checking BLE readiness:', error);
+            return false;
+        }
+    };
+
     const checkDeviceConnection = async () => {
         if (device?.id) {
-            const connected = await BLEService.isDeviceConnected(device.id);
-            if (connected !== isConnected) {
-                console.log('[DeviceContext] Connection status changed:', connected);
-                setIsConnected(connected);
-                await DeviceStorage.updateConnectionStatus(connected);
-
-                // Update device state
-                setDeviceState(prev => prev ? { ...prev, connected } : null);
-
-                // If disconnected, try to reconnect
-                if (!connected) {
-                    console.log('[DeviceContext] Device disconnected, attempting auto-reconnect...');
-                    setTimeout(async () => {
-                        const reconnected = await reconnectToDevice(device.id);
-                        if (reconnected) {
-                            console.log('[DeviceContext] Auto-reconnect successful');
-                        } else {
-                            console.log('[DeviceContext] Auto-reconnect failed');
-                        }
-                    }, 2000); // Wait 2s before reconnecting
+            try {
+                // Check BLE readiness first
+                const bleReady = await isBLEReady();
+                if (!bleReady) {
+                    if (isConnected) {
+                        console.log('[DeviceContext] BLE not ready, marking as disconnected');
+                        setIsConnected(false);
+                        await DeviceStorage.updateConnectionStatus(false);
+                        setDeviceState(prev => prev ? { ...prev, connected: false } : null);
+                    }
+                    return;
                 }
+
+                const connected = await BLEService.isDeviceConnected(device.id);
+                if (connected !== isConnected) {
+                    console.log('[DeviceContext] Connection status changed:', connected);
+                    setIsConnected(connected);
+                    await DeviceStorage.updateConnectionStatus(connected);
+
+                    setDeviceState(prev => prev ? { ...prev, connected } : null);
+
+                    if (!connected) {
+                        console.log('[DeviceContext] Device disconnected, attempting auto-reconnect...');
+                        setTimeout(async () => {
+                            const reconnected = await reconnectToDevice(device.id);
+                            if (reconnected) {
+                                console.log('[DeviceContext] Auto-reconnect successful');
+                            } else {
+                                console.log('[DeviceContext] Auto-reconnect failed');
+                            }
+                        }, 2000);
+                    }
+                }
+            } catch (error) {
+                console.error('[DeviceContext] Error checking device connection:', error);
             }
         }
     };
@@ -189,42 +227,61 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }, [device?.id, isConnected]); // Changed from device?.connected to isConnected
 
     const loadDevice = async () => {
-        const savedDevice = await DeviceStorage.getConnectedDevice();
-        if (savedDevice) {
-            // Check actual BLE connection status
-            const actuallyConnected = await BLEService.isDeviceConnected(savedDevice.id);
-            const updatedDevice = { ...savedDevice, connected: actuallyConnected };
+        try {
+            const savedDevice = await DeviceStorage.getConnectedDevice();
+            if (savedDevice) {
+                // Check BLE readiness before any BLE operations
+                const bleReady = await isBLEReady();
 
-            setDeviceState(updatedDevice);
-            setIsConnected(actuallyConnected);
+                if (!bleReady) {
+                    console.log('[DeviceContext] BLE not ready, setting device as disconnected');
+                    const updatedDevice = { ...savedDevice, connected: false };
+                    setDeviceState(updatedDevice);
+                    setIsConnected(false);
+                    return;
+                }
 
-            // Update storage with actual connection status
-            if (actuallyConnected !== savedDevice.connected) {
-                await DeviceStorage.updateConnectionStatus(actuallyConnected);
-            }
+                const actuallyConnected = await BLEService.isDeviceConnected(savedDevice.id);
+                const updatedDevice = { ...savedDevice, connected: actuallyConnected };
 
-            // If not connected, try auto-reconnect
-            if (!actuallyConnected) {
-                console.log('[DeviceContext] Device not connected, attempting auto-reconnect...');
-                const reconnected = await reconnectToDevice(savedDevice.id);
-                if (!reconnected) {
-                    console.log('[DeviceContext] Auto-reconnect failed, will retry periodically');
+                setDeviceState(updatedDevice);
+                setIsConnected(actuallyConnected);
+
+                if (actuallyConnected !== savedDevice.connected) {
+                    await DeviceStorage.updateConnectionStatus(actuallyConnected);
+                }
+
+                if (!actuallyConnected) {
+                    console.log('[DeviceContext] Device not connected, attempting auto-reconnect...');
+                    const reconnected = await reconnectToDevice(savedDevice.id);
+                    if (!reconnected) {
+                        console.log('[DeviceContext] Auto-reconnect failed, will retry periodically');
+                    }
+                }
+            } else {
+                console.log('[DeviceContext] No saved device, checking history...');
+
+                // Check BLE readiness before attempting connection
+                const bleReady = await isBLEReady();
+                if (!bleReady) {
+                    console.log('[DeviceContext] BLE not ready, skipping auto-connect');
+                    return;
+                }
+
+                const history = await DeviceStorage.getDeviceHistory();
+                if (history.length > 0) {
+                    const mostRecent = history[0];
+                    console.log('[DeviceContext] Attempting to connect to most recent device:', mostRecent.name);
+                    const connected = await reconnectToDevice(mostRecent.id);
+                    if (connected) {
+                        console.log('[DeviceContext] Auto-connected to most recent device');
+                    } else {
+                        console.log('[DeviceContext] Failed to auto-connect to most recent device');
+                    }
                 }
             }
-        } else {
-            // No saved device, try to connect to most recent device in history
-            console.log('[DeviceContext] No saved device, checking history...');
-            const history = await DeviceStorage.getDeviceHistory();
-            if (history.length > 0) {
-                const mostRecent = history[0];
-                console.log('[DeviceContext] Attempting to connect to most recent device:', mostRecent.name);
-                const connected = await reconnectToDevice(mostRecent.id);
-                if (connected) {
-                    console.log('[DeviceContext] Auto-connected to most recent device');
-                } else {
-                    console.log('[DeviceContext] Failed to auto-connect to most recent device');
-                }
-            }
+        } catch (error) {
+            console.error('[DeviceContext] Error loading device:', error);
         }
     };
 
@@ -289,11 +346,16 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         try {
             console.log('[DeviceContext] Reconnecting to device:', deviceId);
 
-            // Try to connect
+            // Check BLE readiness before connecting
+            const bleReady = await isBLEReady();
+            if (!bleReady) {
+                console.log('[DeviceContext] BLE not ready, skipping reconnect');
+                return false;
+            }
+
             const connected = await BLEService.connectToDevice(deviceId);
 
             if (connected) {
-                // Get device from history
                 const history = await DeviceStorage.getDeviceHistory();
                 const targetDevice = history.find(d => d.id === deviceId);
 
@@ -301,13 +363,12 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                     const updatedDevice = { ...targetDevice, connected: true };
                     await setDevice(updatedDevice);
 
-                    // CRITICAL: Send user profile (includes time sync and config)
                     console.log('[DeviceContext] Sending user profile to reconnected device...');
                     const profileSent = await sendUserProfileToDevice(deviceId);
                     if (profileSent) {
-                        console.log('[DeviceContext] ✅ User profile sent to reconnected device');
+                        console.log('[DeviceContext] User profile sent to reconnected device');
                     } else {
-                        console.warn('[DeviceContext] ⚠️ Failed to send user profile to reconnected device');
+                        console.warn('[DeviceContext] Failed to send user profile to reconnected device');
                     }
 
                     return true;
@@ -369,9 +430,9 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             console.log('[DeviceContext] Step 1: Syncing time...');
             const timeSynced = await BLEService.syncTime(deviceId);
             if (!timeSynced) {
-                console.error('[DeviceContext] ⚠️ Time sync failed! Timestamps will be incorrect.');
+                console.error('[DeviceContext] Time sync failed! Timestamps will be incorrect.');
             } else {
-                console.log('[DeviceContext] ✅ Time synced successfully');
+                console.log('[DeviceContext] Time synced successfully');
             }
 
             // Get user profile from storage
@@ -381,8 +442,8 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             }
 
             // Calculate BMI from height and weight
-            const height = profile?.height ? profile.height / 100 : 1.70; // Convert cm to meters
-            const weight = profile?.weight || 65;
+            const height = profile?.heightM ? profile.heightM / 100 : 1.70; // Convert cm to meters
+            const weight = profile?.weightKg || 65;
             const bmi = weight / (height * height);
 
             // Try to load saved device config from device settings
@@ -414,9 +475,9 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             const success = await BLEService.writeConfig(deviceId, bleConfig);
 
             if (success) {
-                console.log('[DeviceContext] ✅ User profile sent to device successfully');
+                console.log('[DeviceContext] User profile sent to device successfully');
             } else {
-                console.error('[DeviceContext] ❌ Failed to send user profile to device');
+                console.error('[DeviceContext] Failed to send user profile to device');
             }
 
             return success;

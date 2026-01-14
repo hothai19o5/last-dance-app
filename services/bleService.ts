@@ -139,6 +139,20 @@ export class BLEService {
     console.log('[BLE] Connecting to device:', deviceId);
 
     try {
+      // CRITICAL: Check permissions before connecting
+      const hasPermissions = await this.requestPermissions();
+      if (!hasPermissions) {
+        console.error('[BLE] Bluetooth permissions not granted');
+        return false;
+      }
+
+      // Check Bluetooth state
+      const isEnabled = await this.checkBluetoothState();
+      if (!isEnabled) {
+        console.error('[BLE] Bluetooth is not enabled');
+        return false;
+      }
+
       const device = await bleManager.connectToDevice(deviceId);
       await device.discoverAllServicesAndCharacteristics();
 
@@ -148,31 +162,15 @@ export class BLEService {
           const deviceWithMtu = await device.requestMTU(REQUIRED_MTU);
           const mtu = deviceWithMtu.mtu || 23;
           console.log(`[BLE] MTU set to: ${mtu} bytes`);
-          if (mtu < REQUIRED_MTU) {
-            console.warn(`[BLE] ⚠️ MTU ${mtu} is less than required ${REQUIRED_MTU} bytes. Batch data may be truncated!`);
-          }
-        } catch (error) {
-          console.warn('[BLE] MTU request failed (may use default ~23 bytes):', error);
-          console.warn('[BLE] ⚠️ Batch mode may not work correctly with default MTU!');
+        } catch (mtuError) {
+          console.warn('[BLE] MTU request failed:', mtuError);
         }
-      } else {
-        console.log('[BLE] iOS: MTU is automatically managed (usually 185-512 bytes)');
-      }
-
-      // CRITICAL: Perform Time Sync immediately after connection
-      console.log('[BLE] Performing mandatory Time Sync...');
-      const timeSyncSuccess = await this.syncTime(deviceId);
-      if (!timeSyncSuccess) {
-        console.error('[BLE] Time sync failed! Timestamps will be incorrect.');
-        // Don't fail connection, but warn user
-      } else {
-        console.log('[BLE] Time sync successful');
       }
 
       console.log('[BLE] Connected successfully to:', deviceId);
       return true;
     } catch (error) {
-      console.error('[BLE] Connection error:', error);
+      console.error('[BLE] Connection failed:', error);
       return false;
     }
   }
@@ -218,9 +216,18 @@ export class BLEService {
 
   static async isDeviceConnected(deviceId: string): Promise<boolean> {
     try {
-      const isConnected = await bleManager.isDeviceConnected(deviceId);
-      console.log('[BLE] Device connection status:', deviceId, isConnected);
-      return isConnected;
+      // Check Bluetooth state first to avoid crash
+      const isEnabled = await this.checkBluetoothState();
+      if (!isEnabled) {
+        return false;
+      }
+
+      const device = await bleManager.devices([deviceId]);
+      if (device.length > 0) {
+        const isConnected = await device[0].isConnected();
+        return isConnected;
+      }
+      return false;
     } catch (error) {
       console.error('[BLE] Error checking connection status:', error);
       return false;
@@ -411,7 +418,7 @@ export class BLEService {
           const mtu = deviceWithMtu.mtu || 23;
           console.log(`[BLE] MTU set to: ${mtu} bytes`);
           if (mtu < REQUIRED_MTU) {
-            console.warn(`[BLE] ⚠️ MTU ${mtu} < ${REQUIRED_MTU}. Batch chunks may be truncated (max ~${Math.floor((mtu - 7) / 18)} packets per chunk)`);
+            console.warn(`[BLE] MTU ${mtu} < ${REQUIRED_MTU}. Batch chunks may be truncated (max ~${Math.floor((mtu - 7) / 18)} packets per chunk)`);
           }
         } catch (error) {
           console.log('[BLE] MTU request skipped (may already be set)');
