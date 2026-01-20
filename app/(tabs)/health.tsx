@@ -8,6 +8,7 @@ import ActivityRings from '../../components/ActivityRings';
 import AddMenuToggle from '../../components/AddMenuToggle';
 import WaterIntakeModal from '../../components/WaterIntakeModal';
 import { useDevice } from '../../contexts/DeviceContext';
+import { useTranslation } from '../../contexts/LanguageContext';
 import { useTheme, useThemeColors } from '../../contexts/ThemeContext';
 import { healthHistoryService } from '../../services/healthHistoryService';
 import { notificationSettingsService } from '../../services/notificationSettings';
@@ -22,6 +23,7 @@ const { width } = Dimensions.get('window');
 export default function HealthScreen() {
     const colors = useThemeColors();
     const { themeTransition } = useTheme();
+    const t = useTranslation();
     const { healthData, pendingSyncCount, forceSyncToServer } = useDevice();
     const fadeAnim = useRef(new Animated.Value(1)).current;
     const [showAddMenu, setShowAddMenu] = useState(false);
@@ -31,6 +33,7 @@ export default function HealthScreen() {
     const [spO2ChartData, setSpO2ChartData] = useState<{ value: number }[]>([]);
     const [weightHistory, setWeightHistory] = useState<number[]>([]);
     const [waterIntakeMl, setWaterIntakeMl] = useState(0);
+    const [todayStats, setTodayStats] = useState<{ calories: number; movingMinutes: number } | null>(null);
 
     // Load user profile when screen comes into focus
     useFocusEffect(
@@ -38,6 +41,7 @@ export default function HealthScreen() {
             loadUserProfile();
             loadChartData();
             loadWaterIntake();
+            loadTodayStats();
         }, [])
     );
 
@@ -46,13 +50,20 @@ export default function HealthScreen() {
         setWaterIntakeMl(total);
     };
 
+    const loadTodayStats = async () => {
+        const stats = await healthHistoryService.getTodayStats();
+        if (stats) {
+            setTodayStats(stats);
+        }
+    };
+
     const handleAddWater = async (amountMl: number) => {
         try {
             await waterIntakeService.addWater(amountMl);
             await loadWaterIntake();
-            showToast.success('Water Added', `Added ${amountMl}ml to your daily intake`);
+            showToast.success(t.health.waterAdded, `${t.health.added} ${amountMl}ml`);
         } catch (error) {
-            showToast.error('Error', 'Failed to add water intake');
+            showToast.error(t.common.error, t.health.failedToAddWater);
         }
     };
 
@@ -94,6 +105,7 @@ export default function HealthScreen() {
         console.log('[Health] Health data updated:', healthData);
         console.log('[Health] HR:', healthData?.heartRate, 'SpO2:', healthData?.spo2, 'Steps:', healthData?.steps);
         loadChartData();
+        loadTodayStats();
     }, [healthData, userProfile?.weightKg]);
 
     // Health goals
@@ -110,15 +122,16 @@ export default function HealthScreen() {
 
     console.log('[Health] Rendering with:', { heartRate, spo2, currentSteps, activityStatus });
 
-    // Calculate calories based on steps and activity
-    const currentCalories = calculateActivityCalories(
+    // Use stored cumulative calories and moving time (persisted across app restarts)
+    // Fall back to calculated values if no stored data
+    const currentCalories = todayStats?.calories ?? healthData?.caloriesBurned ?? calculateActivityCalories(
         currentSteps,
         activityStatus,
         userProfile?.weightKg || 70
     );
 
-    // Calculate moving time based on steps and activity
-    const movingMinutes = calculateMovingTime(currentSteps, activityStatus);
+    // Use stored moving time (persisted across app restarts)
+    const movingMinutes = todayStats?.movingMinutes ?? calculateMovingTime(currentSteps, activityStatus);
 
     const alertScore = healthData?.alertScore;
     const userWeight = userProfile?.weightKg || null;
@@ -202,26 +215,26 @@ export default function HealthScreen() {
         {
             icon: 'fitness' as const,
             iconColor: colors.heartRateColor,
-            title: 'Add Workout',
-            onPress: () => showToast.info('Feature coming soon'),
+            title: t.health.addWorkout,
+            onPress: () => showToast.info(t.common.featureComingSoon),
         },
         {
             icon: 'water' as const,
             iconColor: colors.waterIntakeColor,
-            title: 'Log Water Intake',
+            title: t.health.logWaterIntake,
             onPress: () => setShowWaterModal(true),
         },
         {
             icon: 'restaurant' as const,
             iconColor: colors.warning,
-            title: 'Add Meal',
-            onPress: () => showToast.info('Feature coming soon'),
+            title: t.health.addMeal,
+            onPress: () => showToast.info(t.common.featureComingSoon),
         },
         {
             icon: 'analytics' as const,
             iconColor: colors.success,
-            title: 'Manual Entry',
-            onPress: () => showToast.info('Feature coming soon'),
+            title: t.health.manualEntry,
+            onPress: () => showToast.info(t.common.featureComingSoon),
         },
     ];
 
@@ -235,7 +248,7 @@ export default function HealthScreen() {
             >
                 {/* Header */}
                 <View style={styles.header}>
-                    <Text style={[styles.headerTitle, { color: colors.text }]}>Health</Text>
+                    <Text style={[styles.headerTitle, { color: colors.text }]}>{t.tabs.health}</Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                         {/* Pending Sync Badge */}
                         {pendingSyncCount > 0 && (
@@ -285,7 +298,7 @@ export default function HealthScreen() {
                     <MetricCard
                         icon="flame"
                         iconColor={colors.caloriesColor}
-                        label="Calories"
+                        label={t.health.calories}
                         value={currentCalories}
                         unit=" kcal"
                         goal={caloriesGoal}
@@ -295,9 +308,9 @@ export default function HealthScreen() {
                     <MetricCard
                         icon="walk"
                         iconColor={colors.stepsColor}
-                        label="Steps"
+                        label={t.health.steps}
                         value={currentSteps}
-                        unit=" steps"
+                        unit={` ${t.health.stepsUnit}`}
                         goal={stepsGoal}
                         colors={colors}
                         onPress={() => router.push('/steps-stats')}
@@ -305,7 +318,7 @@ export default function HealthScreen() {
                     <MetricCard
                         icon="water"
                         iconColor={colors.waterIntakeColor}
-                        label="Water Intake"
+                        label={t.health.waterIntake}
                         value={waterIntakeMl}
                         unit=" ml"
                         goal={waterIntakeGoal}
@@ -321,7 +334,7 @@ export default function HealthScreen() {
                             <Ionicons name="person" size={12} color={colors.iconOnColor} />
                         </View>
                         <Text style={[styles.movingText, { color: colors.text }]}>
-                            Moving {movingMinutes} mins {activityStatus !== undefined && activityStatus > 1 ? `(${getActivityLabel(activityStatus)})` : ''}
+                            {t.health.moving} {movingMinutes} {t.health.minutes} {activityStatus !== undefined && activityStatus > 1 ? `(${getActivityLabel(activityStatus)})` : ''}
                         </Text>
                     </View>
                 </TouchableOpacity>
@@ -337,11 +350,11 @@ export default function HealthScreen() {
                             <View style={[styles.circleIcon, { backgroundColor: colors.heartRateIconBg }]}>
                                 <Ionicons name="heart" size={12} color={colors.iconOnColor} />
                             </View>
-                            <Text style={[styles.cardTitle, { color: colors.text }]}>Heart rate</Text>
+                            <Text style={[styles.cardTitle, { color: colors.text }]}>{t.health.heartRate}</Text>
                         </View>
-                        <Text style={[styles.cardValue, { color: colors.text }]}>{heartRate} BPM</Text>
+                        <Text style={[styles.cardValue, { color: colors.text }]}>{heartRate} {t.health.bpm}</Text>
                         <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>
-                            {healthData?.timestampISO ? new Date(healthData.timestampISO).toLocaleString() : 'No data'}
+                            {healthData?.timestampISO ? new Date(healthData.timestampISO).toLocaleString() : t.common.noData}
                         </Text>
 
                         {/* Heart Rate Chart */}
@@ -372,11 +385,11 @@ export default function HealthScreen() {
                             <View style={[styles.circleIcon, { backgroundColor: colors.spO2IconBg }]}>
                                 <Ionicons name="water" size={12} color={colors.iconOnColor} />
                             </View>
-                            <Text style={[styles.cardTitle, { color: colors.text }]}>SpO2</Text>
+                            <Text style={[styles.cardTitle, { color: colors.text }]}>{t.health.spo2}</Text>
                         </View>
                         <Text style={[styles.cardValue, { color: colors.text }]}>{spo2} %</Text>
                         <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>
-                            {healthData?.timestampISO ? new Date(healthData.timestampISO).toLocaleString() : 'No data'}
+                            {healthData?.timestampISO ? new Date(healthData.timestampISO).toLocaleString() : t.common.noData}
                         </Text>
 
                         {/* SpO2 Chart */}
@@ -407,13 +420,13 @@ export default function HealthScreen() {
                             <View style={[styles.circleIcon, { backgroundColor: colors.weightIconBg }]}>
                                 <Ionicons name="scale" size={12} color={colors.iconOnColor} />
                             </View>
-                            <Text style={[styles.cardTitle, { color: colors.text }]}>Weight</Text>
+                            <Text style={[styles.cardTitle, { color: colors.text }]}>{t.health.weight}</Text>
                         </View>
                         <Text style={[styles.cardValue, { color: colors.text }]}>
                             {userWeight !== null ? `${userWeight} kg` : '-- kg'}
                         </Text>
                         <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>
-                            {userWeight !== null ? 'From profile' : 'No data'}
+                            {userWeight !== null ? t.health.fromProfile : t.common.noData}
                         </Text>
 
                         {/* Weight Chart - LineChart */}
@@ -449,11 +462,11 @@ export default function HealthScreen() {
                             <View style={[styles.circleIcon, { backgroundColor: colors.sleepIconBg }]}>
                                 <Ionicons name="moon" size={12} color={colors.iconOnColor} />
                             </View>
-                            <Text style={[styles.cardTitle, { color: colors.text }]}>Sleep</Text>
+                            <Text style={[styles.cardTitle, { color: colors.text }]}>{t.health.sleep}</Text>
                         </View>
                         <Text style={[styles.cardValue, { color: colors.text }]}>6h 25m</Text>
                         <Text style={[styles.cardSubtext, { color: colors.textSecondary }]}>
-                            No data
+                            {t.common.noData}
                         </Text>
                     </TouchableOpacity>
 
@@ -469,7 +482,7 @@ export default function HealthScreen() {
                 visible={showAddMenu}
                 onClose={() => setShowAddMenu(false)}
                 menuItems={menuItems}
-                title="Add Health Data"
+                title={t.health.addHealthData}
             />
 
             {/* Water Intake Modal */}

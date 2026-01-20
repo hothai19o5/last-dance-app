@@ -9,6 +9,7 @@ import { healthHistoryService } from '../services/healthHistoryService';
 import { todayHealthDataService } from '../services/todayHealthDataService';
 import { userProfileService } from '../services/userProfileService';
 import { BLEBatchData, BLEConfig, BLEHealthData, WearableDevice } from '../types';
+import { calculateActivityCalories, calculateMovingTime } from '../utils/calorieCalculator';
 
 const DEVICE_CONFIG_KEY = '@device_config';
 
@@ -155,81 +156,116 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             // Start data sync service
             dataSyncService.start(device.id, device.name);
 
-            // Subscribe to health data (alerts and batch data)
-            BLEService.subscribeToHealthData(
-                device.id,
-                // Callback for single readings/alerts
-                async (data: BLEHealthData) => {
-                    console.log('[DeviceContext] ========== RECEIVED HEALTH DATA ==========');
-                    console.log('[DeviceContext] Timestamp:', data.timestampISO);
-                    console.log('[DeviceContext] HR:', data.heartRate, 'SpO2:', data.spo2, 'Steps:', data.steps);
-                    console.log('[DeviceContext] Activity:', data.activityStatus, 'Sleep:', data.sleepDurationMinutes);
-                    console.log('[DeviceContext] Alert Score:', data.alertScore);
-                    console.log('[DeviceContext] ===============================================');
+            // Setup subscriptions in an async IIFE
+            (async () => {
+                // Get user profile for calorie calculation
+                const userProfile = await userProfileService.getProfile();
+                const userWeight = userProfile?.weightKg || 70;
 
-                    setHealthData(data);
+                // Subscribe to health data (alerts and batch data)
+                BLEService.subscribeToHealthData(
+                    device.id,
+                    // Callback for single readings/alerts
+                    async (data: BLEHealthData) => {
+                        console.log('[DeviceContext] ========== RECEIVED HEALTH DATA ==========');
+                        console.log('[DeviceContext] Timestamp:', data.timestampISO);
+                        console.log('[DeviceContext] HR:', data.heartRate, 'SpO2:', data.spo2, 'Steps:', data.steps);
+                        console.log('[DeviceContext] Activity:', data.activityStatus, 'Sleep:', data.sleepDurationMinutes);
+                        console.log('[DeviceContext] Alert Score:', data.alertScore);
+                        console.log('[DeviceContext] ===============================================');
 
-                    // Save to today's health data for persistence (so cards show data when app reopens)
-                    await todayHealthDataService.saveHealthData(data);
+                        // Calculate calories and moving time
+                        const caloriesBurned = calculateActivityCalories(
+                            data.steps,
+                            data.activityStatus ?? 2,
+                            userWeight
+                        );
+                        const movingMinutes = calculateMovingTime(data.steps, data.activityStatus ?? 2);
 
-                    // Save to health history for charts
-                    await healthHistoryService.addHealthData(data);
+                        // Update data with calculated values
+                        const enrichedData = {
+                            ...data,
+                            caloriesBurned,
+                        };
 
-                    // Add to sync buffer (alerts are important, sync immediately)
-                    if (data.alertScore !== null && data.alertScore > 0.95) {
-                        console.log('[DeviceContext] ALERT! Score:', data.alertScore);
-                        dataSyncService.addData(data);
-                        dataSyncService.forceSyncNow(); // Sync alerts immediately
-                    } else {
-                        dataSyncService.addData(data);
+                        setHealthData(enrichedData);
+
+                        // Save to today's health data for persistence with cumulative calories/moving time
+                        await todayHealthDataService.saveHealthData(data, caloriesBurned, movingMinutes);
+
+                        // Save to health history for charts
+                        await healthHistoryService.addHealthData(data);
+
+                        // Add to sync buffer (alerts are important, sync immediately)
+                        if (data.alertScore !== null && data.alertScore > 0.95) {
+                            console.log('[DeviceContext] ALERT! Score:', data.alertScore);
+                            dataSyncService.addData(enrichedData);
+                            dataSyncService.forceSyncNow(); // Sync alerts immediately
+                        } else {
+                            dataSyncService.addData(enrichedData);
+                        }
+                        updateSyncCount();
+                    },
+                    // Callback for batch data (5-minute data)
+                    async (batchData: BLEBatchData) => {
+                        console.log('[DeviceContext] Received batch data:', batchData.count, 'samples');
+
+                        // Save all packets to health history for charts
+                        for (const packet of batchData.packets) {
+                            await healthHistoryService.addHealthData(packet);
+                        }
+
+                        // Add entire batch to sync buffer at once (more efficient)
+                        dataSyncService.addBatchData(batchData.packets);
+
+                        // Update current health data with latest from batch
+                        if (batchData.packets.length > 0) {
+                            const latestPacket = batchData.packets[batchData.packets.length - 1];
+
+                            // Calculate calories and moving time for latest packet
+                            const caloriesBurned = calculateActivityCalories(
+                                latestPacket.steps,
+                                latestPacket.activityStatus ?? 2,
+                                userWeight
+                            );
+                            const movingMinutes = calculateMovingTime(latestPacket.steps, latestPacket.activityStatus ?? 2);
+
+                            const enrichedData = {
+                                ...latestPacket,
+                                caloriesBurned,
+                            };
+
+                            setHealthData(enrichedData);
+
+                            // Save latest to today's health data for persistence with cumulative values
+                            await todayHealthDataService.saveHealthData(latestPacket, caloriesBurned, movingMinutes);
+                        }
+
+                        updateSyncCount();
+
+                        // Note: No need to force sync here - batch data will be synced automatically
+                        // based on buffer size (1000 records) or interval (5 minutes)
                     }
-                    updateSyncCount();
-                },
-                // Callback for batch data (5-minute data)
-                async (batchData: BLEBatchData) => {
-                    console.log('[DeviceContext] Received batch data:', batchData.count, 'samples');
+                ).then((unsub) => {
+                    unsubscribeHealth = unsub;
+                    console.log('[DeviceContext] Health data subscription established');
+                }).catch((error) => {
+                    console.error('[DeviceContext] Failed to subscribe to health data:', error);
+                });
 
-                    // Save all packets to health history for charts
-                    for (const packet of batchData.packets) {
-                        await healthHistoryService.addHealthData(packet);
-                    }
-
-                    // Add entire batch to sync buffer at once (more efficient)
-                    dataSyncService.addBatchData(batchData.packets);
-
-                    // Update current health data with latest from batch
-                    if (batchData.packets.length > 0) {
-                        const latestPacket = batchData.packets[batchData.packets.length - 1];
-                        setHealthData(latestPacket);
-
-                        // Save latest to today's health data for persistence
-                        await todayHealthDataService.saveHealthData(latestPacket);
-                    }
-
-                    updateSyncCount();
-
-                    // Note: No need to force sync here - batch data will be synced automatically
-                    // based on buffer size (1000 records) or interval (5 minutes)
-                }
-            ).then((unsub) => {
-                unsubscribeHealth = unsub;
-                console.log('[DeviceContext] Health data subscription established');
-            }).catch((error) => {
-                console.error('[DeviceContext] Failed to subscribe to health data:', error);
-            });
-
-            // Subscribe to battery notifications
-            BLEService.subscribeToBattery(device.id, async (level: number) => {
-                console.log('[DeviceContext] Battery updated:', level, '%');
-                setBatteryLevel(level);
-                await DeviceStorage.updateBatteryLevel(level);
-                setDeviceState(prev => prev ? { ...prev, battery: level } : null);
-            }).then((unsub) => {
-                unsubscribeBattery = unsub;
-                console.log('[DeviceContext] Battery subscription established');
-            }).catch((error) => {
-                console.error('[DeviceContext] Failed to subscribe to battery:', error);
-            });
+                // Subscribe to battery notifications
+                BLEService.subscribeToBattery(device.id, async (level: number) => {
+                    console.log('[DeviceContext] Battery updated:', level, '%');
+                    setBatteryLevel(level);
+                    await DeviceStorage.updateBatteryLevel(level);
+                    setDeviceState(prev => prev ? { ...prev, battery: level } : null);
+                }).then((unsub) => {
+                    unsubscribeBattery = unsub;
+                    console.log('[DeviceContext] Battery subscription established');
+                }).catch((error) => {
+                    console.error('[DeviceContext] Failed to subscribe to battery:', error);
+                });
+            })(); // End of async IIFE
         } else {
             console.log('[DeviceContext] Not subscribing - isConnected:', isConnected, 'deviceId:', device?.id);
         }

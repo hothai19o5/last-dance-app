@@ -109,4 +109,14 @@ export const healthHistoryService = {
 
         return paddedData.map(value => ({ value }));
     },
+
+    /**
+     * Get today's cumulative stats (calories and moving time)
+     * Delegates to todayHealthDataService
+     */
+    async getTodayStats(): Promise<{ calories: number; movingMinutes: number } | null> {
+        // Import dynamically to avoid circular dependency
+        const { todayHealthDataService } = await import('./todayHealthDataService');
+        return todayHealthDataService.getTodayStats();
+    },
 };

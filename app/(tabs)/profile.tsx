@@ -3,6 +3,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AddMenuToggle from '../../components/AddMenuToggle';
+import { useLanguage, useTranslation } from '../../contexts/LanguageContext';
 import { useTheme, useThemeColors } from '../../contexts/ThemeContext';
 import { authService } from '../../services/authService';
 import { userProfileService } from '../../services/userProfileService';
@@ -13,6 +14,8 @@ export default function ProfileScreen() {
     const router = useRouter();
     const { themeMode, setThemeMode } = useTheme();
     const colors = useThemeColors();
+    const { language } = useLanguage();
+    const t = useTranslation();
     const [showThemeModal, setShowThemeModal] = useState(false);
     const [showAddMenu, setShowAddMenu] = useState(false);
     const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -48,15 +51,15 @@ export default function ProfileScreen() {
 
     const handleLogout = async () => {
         Alert.alert(
-            'Logout',
-            'Are you sure you want to logout?',
+            t.common.logout,
+            t.profile.logoutConfirm,
             [
                 {
-                    text: 'Cancel',
+                    text: t.common.cancel,
                     style: 'cancel',
                 },
                 {
-                    text: 'Logout',
+                    text: t.common.logout,
                     style: 'destructive',
                     onPress: async () => {
                         try {
@@ -69,7 +72,7 @@ export default function ProfileScreen() {
                             }, 500);
                         } catch (error) {
                             console.error('[Profile] Logout error:', error);
-                            Alert.alert('Error', 'Failed to logout. Please try again.');
+                            Alert.alert(t.common.error, t.errors.logoutFailed);
                         }
                     },
                 },
@@ -82,26 +85,26 @@ export default function ProfileScreen() {
         {
             icon: 'person-add' as const,
             iconColor: colors.info,
-            title: 'Edit Profile',
+            title: t.profile.editProfile,
             onPress: handleEditProfile,
         },
         {
             icon: 'trophy' as const,
             iconColor: colors.warning,
-            title: 'Add Achievement',
-            onPress: () => Alert.alert('Achievement', 'Add a new achievement'),
+            title: t.profile.addAchievement,
+            onPress: () => Alert.alert(t.profile.achievement, t.profile.addAchievementDesc),
         },
         {
             icon: 'people' as const,
             iconColor: colors.success,
-            title: 'Invite Friends',
-            onPress: () => Alert.alert('Invite', 'Invite friends to compete'),
+            title: t.profile.inviteFriends,
+            onPress: () => Alert.alert(t.profile.invite, t.profile.inviteFriendsDesc),
         },
         {
             icon: 'share-social' as const,
             iconColor: colors.stepsColor,
-            title: 'Share Progress',
-            onPress: () => Alert.alert('Share', 'Share your progress on social media'),
+            title: t.profile.shareProgress,
+            onPress: () => Alert.alert(t.profile.share, t.profile.shareProgressDesc),
         },
     ];
 
@@ -109,7 +112,7 @@ export default function ProfileScreen() {
         <ScrollView style={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
             {/* Header */}
             <View style={[styles.header]}>
-                <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
+                <Text style={[styles.headerTitle, { color: colors.text }]}>{t.tabs.profile}</Text>
                 <TouchableOpacity style={styles.addButton} onPress={() => setShowAddMenu(true)}>
                     <Ionicons name="add-circle-outline" size={28} color={colors.tint} />
                 </TouchableOpacity>
@@ -128,12 +131,12 @@ export default function ProfileScreen() {
                     <Text style={[styles.userId, { color: colors.text }]}>
                         {profile?.firstName && profile?.lastName
                             ? `${profile.firstName} ${profile.lastName}`
-                            : profile?.username || 'Guest User'}
+                            : profile?.username || t.profile.guestUser}
                     </Text>
                     <Text style={[styles.userDetails, { color: colors.textSecondary }]}>
                         {profile
-                            ? `${profile.gender || ''}   ${profile.heightM ? `${profile.heightM} m` : ''}   ${profile.age ? `${profile.age} years` : ''}`
-                            : 'Tap to set up profile'}
+                            ? `${profile.gender || ''}   ${profile.heightM ? `${profile.heightM} m` : ''}   ${profile.age ? `${profile.age} ${t.profile.years}` : ''}`
+                            : t.profile.tapToSetup}
                     </Text>
                 </View>
             </TouchableOpacity>
@@ -145,8 +148,8 @@ export default function ProfileScreen() {
                         <Text style={styles.trophyEmoji}><Ionicons name="trophy" size={32} color="#fd570aff" /></Text>
                     </View>
                     <View style={styles.competitionLeft}>
-                        <Text style={[styles.competitionTitle, { color: colors.text }]}>Competition</Text>
-                        <Text style={[styles.competitionStatus, { color: colors.textSecondary }]}>Competition in progress</Text>
+                        <Text style={[styles.competitionTitle, { color: colors.text }]}>{t.profile.competition}</Text>
+                        <Text style={[styles.competitionStatus, { color: colors.textSecondary }]}>{t.profile.competitionInProgress}</Text>
                     </View>
                 </View>
             </TouchableOpacity>
@@ -156,49 +159,49 @@ export default function ProfileScreen() {
                 <SettingItem
                     icon="contrast"
                     iconColor="#5E5CE6"
-                    title="Appearance"
-                    subtitle={themeMode === 'system' ? 'System' : themeMode === 'dark' ? 'Dark' : 'Light'}
+                    title={t.settings.appearance}
+                    subtitle={themeMode === 'system' ? t.settings.system : themeMode === 'dark' ? t.settings.dark : t.settings.light}
                     onPress={() => setShowThemeModal(true)}
                     colors={colors}
                 />
                 <SettingItem
                     icon="settings-outline"
                     iconColor="#5E5CE6"
-                    title="App settings"
-                    subtitle="Language, units, notifications"
-                    onPress={() => Alert.alert('App Settings', 'Configure app settings')}
+                    title={t.settings.appSettings}
+                    subtitle={t.settings.appSettingsDesc}
+                    onPress={() => router.push('/app-settings' as any)}
                     colors={colors}
                 />
                 <SettingItem
                     icon="cloud-outline"
                     iconColor="#34C759"
-                    title="Third-party data"
-                    subtitle="Connect to other health apps"
-                    onPress={() => Alert.alert('Third-party Data', 'Manage connected apps')}
+                    title={t.settings.thirdPartyData}
+                    subtitle={t.settings.thirdPartyDataDesc}
+                    onPress={() => Alert.alert(t.settings.thirdPartyData, t.settings.thirdPartyDataDesc)}
                     colors={colors}
                 />
                 <SettingItem
                     icon="shield-checkmark-outline"
                     iconColor="#32ADE6"
-                    title="App permissions"
-                    subtitle="Manage app permissions"
-                    onPress={() => Alert.alert('Permissions', 'Manage app permissions')}
+                    title={t.settings.appPermissions}
+                    subtitle={t.settings.appPermissionsDesc}
+                    onPress={() => Alert.alert(t.settings.appPermissions, t.settings.appPermissionsDesc)}
                     colors={colors}
                 />
                 <SettingItem
                     icon="chatbubble-outline"
                     iconColor="#FF9500"
-                    title="Feedback"
-                    subtitle="Send feedback or report issues"
-                    onPress={() => Alert.alert('Feedback', 'Send us your feedback')}
+                    title={t.settings.feedback}
+                    subtitle={t.settings.feedbackDesc}
+                    onPress={() => Alert.alert(t.settings.feedback, t.settings.feedbackDesc)}
                     colors={colors}
                 />
                 <SettingItem
                     icon="information-circle-outline"
                     iconColor="#007AFF"
-                    title="About this app"
-                    subtitle="Version 1.0.0"
-                    onPress={() => Alert.alert('About', 'Health Tracker v1.0.0\n\nBuilt with React Native & Expo')}
+                    title={t.settings.aboutApp}
+                    subtitle={`${t.settings.version} 1.0.0`}
+                    onPress={() => Alert.alert(t.settings.about, 'Health Tracker v1.0.0\n\nBuilt with React Native & Expo')}
                     colors={colors}
                 />
             </View>
@@ -209,7 +212,7 @@ export default function ProfileScreen() {
                 onPress={handleLogout}
             >
                 <Ionicons name="log-out-outline" size={20} color={colors.error} />
-                <Text style={[styles.logoutText, { color: colors.error }]}>Logout</Text>
+                <Text style={[styles.logoutText, { color: colors.error }]}>{t.common.logout}</Text>
             </TouchableOpacity>
 
             {/* Theme Selection Modal */}
@@ -225,14 +228,14 @@ export default function ProfileScreen() {
                     onPress={() => setShowThemeModal(false)}
                 >
                     <View style={[styles.modalContent, { backgroundColor: colors.cardBackground }]}>
-                        <Text style={[styles.modalTitle, { color: colors.text }]}>Choose Theme</Text>
+                        <Text style={[styles.modalTitle, { color: colors.text }]}>{t.settings.chooseTheme}</Text>
 
                         <TouchableOpacity
                             style={[styles.themeOption, themeMode === 'light' && { backgroundColor: colors.background }]}
                             onPress={() => handleThemeSelect('light')}
                         >
                             <Ionicons name="sunny" size={24} color={colors.text} />
-                            <Text style={[styles.themeOptionText, { color: colors.text }]}>Light</Text>
+                            <Text style={[styles.themeOptionText, { color: colors.text }]}>{t.settings.light}</Text>
                             {themeMode === 'light' && <Ionicons name="checkmark" size={24} color={colors.tint} />}
                         </TouchableOpacity>
 
@@ -241,7 +244,7 @@ export default function ProfileScreen() {
                             onPress={() => handleThemeSelect('dark')}
                         >
                             <Ionicons name="moon" size={24} color={colors.text} />
-                            <Text style={[styles.themeOptionText, { color: colors.text }]}>Dark</Text>
+                            <Text style={[styles.themeOptionText, { color: colors.text }]}>{t.settings.dark}</Text>
                             {themeMode === 'dark' && <Ionicons name="checkmark" size={24} color={colors.tint} />}
                         </TouchableOpacity>
 
@@ -250,7 +253,7 @@ export default function ProfileScreen() {
                             onPress={() => handleThemeSelect('system')}
                         >
                             <Ionicons name="phone-portrait" size={24} color={colors.text} />
-                            <Text style={[styles.themeOptionText, { color: colors.text }]}>System</Text>
+                            <Text style={[styles.themeOptionText, { color: colors.text }]}>{t.settings.system}</Text>
                             {themeMode === 'system' && <Ionicons name="checkmark" size={24} color={colors.tint} />}
                         </TouchableOpacity>
 
@@ -258,7 +261,7 @@ export default function ProfileScreen() {
                             style={[styles.modalCancelButton, { backgroundColor: colors.background }]}
                             onPress={() => setShowThemeModal(false)}
                         >
-                            <Text style={[styles.modalCancelText, { color: colors.text }]}>Cancel</Text>
+                            <Text style={[styles.modalCancelText, { color: colors.text }]}>{t.common.cancel}</Text>
                         </TouchableOpacity>
                     </View>
                 </TouchableOpacity>
@@ -271,7 +274,7 @@ export default function ProfileScreen() {
                 visible={showAddMenu}
                 onClose={() => setShowAddMenu(false)}
                 menuItems={menuItems}
-                title="Quick Actions"
+                title={t.profile.quickActions}
             />
         </ScrollView>
     );

@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Animated, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AddMenuToggle from '../../components/AddMenuToggle';
 import { useDevice } from '../../contexts/DeviceContext';
+import { useTranslation } from '../../contexts/LanguageContext';
 import { useTheme, useThemeColors } from '../../contexts/ThemeContext';
 import { apiService } from '../../services/api';
 import { WearableDevice } from '../../types';
@@ -13,6 +14,7 @@ export default function DeviceScreen() {
     const colors = useThemeColors();
     const router = useRouter();
     const { themeTransition } = useTheme();
+    const t = useTranslation();
     const { device, syncDeviceData, disconnectDevice, pendingSyncCount, forceSyncToServer, isConnected, reconnectToDevice, getDeviceHistory, removeDevice } = useDevice();
     const [syncing, setSyncing] = useState(false);
     const [showAddMenu, setShowAddMenu] = useState(false);
@@ -84,7 +86,7 @@ export default function DeviceScreen() {
             }
         } catch (error) {
             console.error('[Device] Error loading device history:', error);
-            showToast.error('Failed to load devices');
+            showToast.error(t.device.failedToLoadDevices);
         } finally {
             setLoadingDevices(false);
         }
@@ -137,15 +139,15 @@ export default function DeviceScreen() {
 
     const handleWatchFaceSelect = (selectedDevice: WearableDevice) => {
         Alert.alert(
-            'Connect to Device',
-            `Do you want to connect to ${selectedDevice.name}?`,
+            t.device.connectToDevice,
+            `${t.device.doYouWantToConnect} ${selectedDevice.name}?`,
             [
                 {
-                    text: 'Cancel',
+                    text: t.common.cancel,
                     style: 'cancel',
                 },
                 {
-                    text: 'Connect',
+                    text: t.device.connect,
                     onPress: async () => {
                         // Pass device info so it can be saved to local storage if not already there
                         const success = await reconnectToDevice(selectedDevice.id, selectedDevice);
@@ -163,23 +165,23 @@ export default function DeviceScreen() {
 
     const handleDeleteDevice = (targetDevice: WearableDevice) => {
         Alert.alert(
-            'Delete Device',
-            `Are you sure you want to remove "${targetDevice.name}" from your devices? This action cannot be undone.`,
+            t.device.deleteDevice,
+            `${t.device.confirmDeleteDevice} "${targetDevice.name}"?`,
             [
                 {
-                    text: 'Cancel',
+                    text: t.common.cancel,
                     style: 'cancel',
                 },
                 {
-                    text: 'Delete',
+                    text: t.common.delete,
                     style: 'destructive',
                     onPress: async () => {
                         const success = await removeDevice(targetDevice.id);
                         if (success) {
-                            showToast.success('Device removed successfully');
+                            showToast.success(t.device.deviceRemovedSuccess);
                             await loadDeviceHistory();
                         } else {
-                            showToast.error('Failed to remove device');
+                            showToast.error(t.device.failedToRemoveDevice);
                         }
                     },
                 },
@@ -192,19 +194,19 @@ export default function DeviceScreen() {
         {
             icon: 'watch' as const,
             iconColor: colors.info,
-            title: 'Add Device',
+            title: t.device.addDevice,
             onPress: handleAddDevice,
         },
         {
             icon: 'bluetooth' as const,
             iconColor: colors.stepsColor,
-            title: 'Scan Bluetooth Devices',
+            title: t.device.scanBluetooth,
             onPress: () => router.push('/scan-devices'),
         },
         {
             icon: 'sync' as const,
             iconColor: colors.success,
-            title: 'Sync Data',
+            title: t.device.syncData,
             onPress: handleSync,
         },
     ];
@@ -218,7 +220,7 @@ export default function DeviceScreen() {
             >
                 {/* Header */}
                 <View style={[styles.header]}>
-                    <Text style={[styles.headerTitle, { color: colors.text }]}>Wearables</Text>
+                    <Text style={[styles.headerTitle, { color: colors.text }]}>{t.device.wearables}</Text>
                     {/* When press button -> toggle add-new-device -> handle similar when press addDeviceButton */}
                     <TouchableOpacity style={styles.addButton} onPress={() => setShowAddMenu(true)} >
                         <Ionicons name="add-circle-outline" size={28} color={colors.tint} />
@@ -237,7 +239,7 @@ export default function DeviceScreen() {
                             style={[styles.addDeviceButton, { backgroundColor: colors.tint }]}
                             onPress={handleAddDevice}
                         >
-                            <Text style={styles.addDeviceButtonText}>Add Device</Text>
+                            <Text style={styles.addDeviceButtonText}>{t.device.addDevice}</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -246,7 +248,7 @@ export default function DeviceScreen() {
                 {(deviceHistory.length > 0 || loadingDevices) && (
                     <View style={[styles.section, { backgroundColor: colors.cardBackground }]}>
                         <View style={styles.sectionHeader}>
-                            <Text style={[styles.sectionTitle, { color: colors.text }]}>My Devices</Text>
+                            <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.device.myDevices}</Text>
                             <TouchableOpacity onPress={loadDeviceHistory} disabled={loadingDevices}>
                                 {loadingDevices ? (
                                     <ActivityIndicator size="small" color={colors.tint} />
@@ -260,7 +262,7 @@ export default function DeviceScreen() {
                             <View style={styles.emptyDevicesContainer}>
                                 <ActivityIndicator size="large" color={colors.tint} />
                                 <Text style={[styles.emptyDevicesText, { color: colors.textSecondary, marginTop: 12 }]}>
-                                    Loading devices...
+                                    {t.device.loadingDevices}
                                 </Text>
                             </View>
                         ) : (
@@ -296,7 +298,7 @@ export default function DeviceScreen() {
                                             {savedDevice.name}
                                         </Text>
                                         <Text style={[styles.tapToConnectText, { color: colors.tint }]}>
-                                            Tap to connect
+                                            {t.device.tapToConnect}
                                         </Text>
                                     </TouchableOpacity>
                                 ))}
@@ -312,7 +314,7 @@ export default function DeviceScreen() {
                     visible={showAddMenu}
                     onClose={() => setShowAddMenu(false)}
                     menuItems={menuItems}
-                    title="Quick Actions"
+                    title={t.device.quickActions}
                 />
             </Animated.ScrollView>
         );
@@ -326,7 +328,7 @@ export default function DeviceScreen() {
         >
             {/* Header */}
             <View style={[styles.header, { backgroundColor: colors.cardBackground }]}>
-                <Text style={[styles.headerTitle, { color: colors.text }]}>Wearables</Text>
+                <Text style={[styles.headerTitle, { color: colors.text }]}>{t.device.wearables}</Text>
                 <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
                     {/* Pending Sync Badge */}
                     {pendingSyncCount > 0 && (
@@ -370,20 +372,20 @@ export default function DeviceScreen() {
                         {/* Row 1: Device Info */}
                         <TouchableOpacity style={styles.deviceInfo}>
                             <View style={styles.deviceHeader}>
-                                <Text style={[styles.deviceName, { color: colors.text }]}>{device?.name || 'Unknown Device'}</Text>
+                                <Text style={[styles.deviceName, { color: colors.text }]}>{device?.name || t.device.unknownDevice}</Text>
                             </View>
                             <View style={styles.deviceStatus}>
                                 <View style={[styles.statusDot, { backgroundColor: isConnected ? colors.success : colors.error }]} />
                                 <Text style={[styles.statusText, { color: isConnected ? colors.success : colors.error }]}>
-                                    {isConnected ? 'Connected' : 'Disconnected'}
+                                    {isConnected ? t.device.connected : t.device.disconnected}
                                 </Text>
                             </View>
                             {isConnected && (
                                 <View style={styles.deviceStatus}>
                                     <View style={[styles.statusDot, { backgroundColor: 'transparent' }]} />
                                     <Text style={[styles.batteryText, { color: colors.textSecondary }]}>
-                                        Battery: {device?.battery || 0}%
-                                        {' | Last charged '}{device?.lastCharged || 'N/A'} days ago
+                                        {t.device.battery}: {device?.battery || 0}%
+                                        {' | '}{t.device.lastCharged} {device?.lastCharged || 'N/A'} {t.device.daysAgo}
                                     </Text>
                                 </View>
                             )}
@@ -396,11 +398,11 @@ export default function DeviceScreen() {
                             disabled={syncing}
                         >
                             {syncing ? (
-                                <Text style={[styles.syncButtonText, { color: colors.tint }]}>Syncing...</Text>
+                                <Text style={[styles.syncButtonText, { color: colors.tint }]}>{t.device.syncing}</Text>
                             ) : (
                                 <>
                                     <Ionicons name="sync" size={20} style={{ color: colors.tint }} />
-                                    <Text style={[styles.syncButtonText, { color: colors.tint }]}>Sync</Text>
+                                    <Text style={[styles.syncButtonText, { color: colors.tint }]}>{t.device.sync}</Text>
                                 </>
                             )}
                         </TouchableOpacity>
@@ -411,7 +413,7 @@ export default function DeviceScreen() {
             {/* My Devices */}
             <View style={[styles.section, { backgroundColor: colors.cardBackground }]}>
                 <View style={styles.sectionHeader}>
-                    <Text style={[styles.sectionTitle, { color: colors.text }]}>My Devices</Text>
+                    <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.device.myDevices}</Text>
                     <TouchableOpacity onPress={loadDeviceHistory} disabled={loadingDevices}>
                         {loadingDevices ? (
                             <ActivityIndicator size="small" color={colors.tint} />
@@ -425,13 +427,13 @@ export default function DeviceScreen() {
                     <View style={styles.emptyDevicesContainer}>
                         <ActivityIndicator size="large" color={colors.tint} />
                         <Text style={[styles.emptyDevicesText, { color: colors.textSecondary, marginTop: 12 }]}>
-                            Loading devices...
+                            {t.device.loadingDevices}
                         </Text>
                     </View>
                 ) : deviceHistory.length === 0 ? (
                     <View style={styles.emptyDevicesContainer}>
                         <Text style={[styles.emptyDevicesText, { color: colors.textSecondary }]}>
-                            No devices found. Connect a device to get started.
+                            {t.device.noDevicesFound}
                         </Text>
                     </View>
                 ) : (
@@ -468,7 +470,7 @@ export default function DeviceScreen() {
                                 </Text>
                                 {savedDevice.id === device?.id && (
                                     <View style={[styles.activeDeviceBadge, { backgroundColor: colors.success }]}>
-                                        <Text style={styles.activeDeviceText}>Active</Text>
+                                        <Text style={styles.activeDeviceText}>{t.device.active}</Text>
                                     </View>
                                 )}
                             </TouchableOpacity>
@@ -482,7 +484,7 @@ export default function DeviceScreen() {
                 <SettingItem
                     icon="settings-outline"
                     iconColor={colors.tint}
-                    title="Device Settings"
+                    title={t.device.deviceSettings}
                     onPress={() => router.push('/device-settings')}
                     colors={colors}
                     disabled={!isConnected}
@@ -490,36 +492,36 @@ export default function DeviceScreen() {
                 <SettingItem
                     icon="notifications"
                     iconColor={colors.warning}
-                    title="Notifications and calls"
+                    title={t.device.notificationsAndCalls}
                     onPress={() => router.push('/notification-settings')}
                     colors={colors}
                 />
                 <SettingItem
                     icon="fitness"
                     iconColor={colors.heartRateColor}
-                    title="Fitness and health"
-                    onPress={() => showToast.info('Feature coming soon')}
+                    title={t.device.fitnessAndHealth}
+                    onPress={() => showToast.info(t.common.featureComingSoon)}
                     colors={colors}
                 />
                 <SettingItem
                     icon="apps"
                     iconColor={colors.info}
-                    title="Apps"
-                    onPress={() => showToast.info('Feature coming soon')}
+                    title={t.device.apps}
+                    onPress={() => showToast.info(t.common.featureComingSoon)}
                     colors={colors}
                 />
                 <SettingItem
                     icon="alarm"
                     iconColor={colors.sleepColor}
-                    title="Alarms"
-                    onPress={() => showToast.info('Feature coming soon')}
+                    title={t.device.alarms}
+                    onPress={() => showToast.info(t.common.featureComingSoon)}
                     colors={colors}
                 />
                 <SettingItem
                     icon="settings"
                     iconColor={colors.textSecondary}
-                    title="System settings"
-                    onPress={() => showToast.info('Feature coming soon')}
+                    title={t.device.systemSettings}
+                    onPress={() => showToast.info(t.common.featureComingSoon)}
                     colors={colors}
                 />
             </View>
@@ -531,7 +533,7 @@ export default function DeviceScreen() {
                 visible={showAddMenu}
                 onClose={() => setShowAddMenu(false)}
                 menuItems={menuItems}
-                title="Quick Actions"
+                title={t.device.quickActions}
             />
         </Animated.ScrollView>
     );

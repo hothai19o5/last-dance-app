@@ -11,6 +11,10 @@ interface TodayHealthStorage {
     date: string;  // YYYY-MM-DD format to check if it's still today
     data: BLEHealthData;
     lastUpdated: string;  // ISO timestamp
+    // Cumulative values for the day
+    totalCaloriesBurned: number;  // Total calories burned today
+    totalMovingMinutes: number;   // Total moving time in minutes today
+    lastSteps: number;            // Last recorded steps (to calculate delta)
 }
 
 /**
@@ -23,16 +27,60 @@ const getTodayDateString = (): string => {
 
 export const todayHealthDataService = {
     /**
-     * Save or update today's health data
-     * This will overwrite any existing data for today
+     * Save or update today's health data with cumulative calories and moving time
+     * @param data Health data from device
+     * @param caloriesBurned Calories burned calculated from this reading
+     * @param movingMinutes Moving time in minutes calculated from this reading
      */
-    async saveHealthData(data: BLEHealthData): Promise<void> {
+    async saveHealthData(data: BLEHealthData, caloriesBurned?: number, movingMinutes?: number): Promise<void> {
         try {
             const today = getTodayDateString();
+
+            // Get existing data to accumulate calories and moving time
+            const existingJson = await AsyncStorage.getItem(TODAY_HEALTH_KEY);
+            let existingStorage: TodayHealthStorage | null = null;
+
+            if (existingJson) {
+                existingStorage = JSON.parse(existingJson);
+                // Reset if it's a new day
+                if (existingStorage && existingStorage.date !== today) {
+                    existingStorage = null;
+                }
+            }
+
+            // Calculate cumulative values
+            let totalCaloriesBurned = existingStorage?.totalCaloriesBurned ?? 0;
+            let totalMovingMinutes = existingStorage?.totalMovingMinutes ?? 0;
+            const lastSteps = existingStorage?.lastSteps ?? 0;
+
+            // Only add calories/moving time if steps increased (new activity)
+            if (data.steps > lastSteps) {
+                if (caloriesBurned !== undefined) {
+                    // Calculate delta calories based on step difference
+                    const stepsDelta = data.steps - lastSteps;
+                    const caloriesPerStep = caloriesBurned / (data.steps || 1);
+                    const deltaCalories = stepsDelta * caloriesPerStep;
+                    totalCaloriesBurned += deltaCalories;
+                }
+                if (movingMinutes !== undefined) {
+                    // Calculate delta moving time based on step difference  
+                    const stepsDelta = data.steps - lastSteps;
+                    const minutesPerStep = movingMinutes / (data.steps || 1);
+                    const deltaMinutes = stepsDelta * minutesPerStep;
+                    totalMovingMinutes += deltaMinutes;
+                }
+            }
+
             const storage: TodayHealthStorage = {
                 date: today,
-                data: data,
+                data: {
+                    ...data,
+                    caloriesBurned: Math.round(totalCaloriesBurned),
+                },
                 lastUpdated: new Date().toISOString(),
+                totalCaloriesBurned: Math.round(totalCaloriesBurned),
+                totalMovingMinutes: Math.round(totalMovingMinutes),
+                lastSteps: data.steps,
             };
 
             await AsyncStorage.setItem(TODAY_HEALTH_KEY, JSON.stringify(storage));
@@ -41,6 +89,8 @@ export const todayHealthDataService = {
                 spo2: data.spo2,
                 steps: data.steps,
                 activity: data.activityStatus,
+                totalCalories: Math.round(totalCaloriesBurned),
+                totalMovingMinutes: Math.round(totalMovingMinutes),
             });
         } catch (error) {
             console.error('[TodayHealth] Failed to save data:', error);
@@ -75,12 +125,45 @@ export const todayHealthDataService = {
                 spo2: storage.data.spo2,
                 steps: storage.data.steps,
                 activity: storage.data.activityStatus,
+                calories: storage.totalCaloriesBurned,
+                movingMinutes: storage.totalMovingMinutes,
                 lastUpdated: storage.lastUpdated,
             });
 
-            return storage.data;
+            // Return data with cumulative values
+            return {
+                ...storage.data,
+                caloriesBurned: storage.totalCaloriesBurned,
+            };
         } catch (error) {
             console.error('[TodayHealth] Failed to get data:', error);
+            return null;
+        }
+    },
+
+    /**
+     * Get cumulative stats for today (calories and moving time)
+     */
+    async getTodayStats(): Promise<{ calories: number; movingMinutes: number } | null> {
+        try {
+            const storageJson = await AsyncStorage.getItem(TODAY_HEALTH_KEY);
+            if (!storageJson) {
+                return null;
+            }
+
+            const storage: TodayHealthStorage = JSON.parse(storageJson);
+            const today = getTodayDateString();
+
+            if (storage.date !== today) {
+                return null;
+            }
+
+            return {
+                calories: storage.totalCaloriesBurned ?? 0,
+                movingMinutes: storage.totalMovingMinutes ?? 0,
+            };
+        } catch (error) {
+            console.error('[TodayHealth] Failed to get today stats:', error);
             return null;
         }
     },

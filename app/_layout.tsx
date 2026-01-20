@@ -5,6 +5,7 @@ import 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 
 import { DeviceProvider } from '@/contexts/DeviceContext';
+import { LanguageProvider } from '@/contexts/LanguageContext';
 import { ThemeProvider, useTheme } from '@/contexts/ThemeContext';
 
 export const unstable_settings = {
@@ -23,6 +24,7 @@ function RootLayoutNav() {
         <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
         <Stack.Screen name="notification-settings" options={{ headerShown: false }} />
         <Stack.Screen name="scan-devices" options={{ headerShown: false }} />
+        <Stack.Screen name="app-settings" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
       <Toast />
@@ -33,9 +35,11 @@ function RootLayoutNav() {
 export default function RootLayout() {
   return (
     <ThemeProvider>
-      <DeviceProvider>
-        <RootLayoutNav />
-      </DeviceProvider>
+      <LanguageProvider>
+        <DeviceProvider>
+          <RootLayoutNav />
+        </DeviceProvider>
+      </LanguageProvider>
     </ThemeProvider>
   );
 }
