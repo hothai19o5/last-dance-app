@@ -174,13 +174,9 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                         console.log('[DeviceContext] Alert Score:', data.alertScore);
                         console.log('[DeviceContext] ===============================================');
 
-                        // Calculate calories and moving time
-                        const caloriesBurned = calculateActivityCalories(
-                            data.steps,
-                            data.activityStatus ?? 2,
-                            userWeight
-                        );
-                        const movingMinutes = calculateMovingTime(data.steps, data.activityStatus ?? 2);
+                        // Calculate calories and moving time (simple formulas)
+                        const caloriesBurned = calculateActivityCalories(data.steps);
+                        const movingMinutes = calculateMovingTime(data.steps);
 
                         // Update data with calculated values
                         const enrichedData = {
@@ -190,7 +186,7 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
                         setHealthData(enrichedData);
 
-                        // Save to today's health data for persistence with cumulative calories/moving time
+                        // Save to today's health data for persistence
                         await todayHealthDataService.saveHealthData(data, caloriesBurned, movingMinutes);
 
                         // Save to health history for charts
@@ -222,13 +218,9 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                         if (batchData.packets.length > 0) {
                             const latestPacket = batchData.packets[batchData.packets.length - 1];
 
-                            // Calculate calories and moving time for latest packet
-                            const caloriesBurned = calculateActivityCalories(
-                                latestPacket.steps,
-                                latestPacket.activityStatus ?? 2,
-                                userWeight
-                            );
-                            const movingMinutes = calculateMovingTime(latestPacket.steps, latestPacket.activityStatus ?? 2);
+                            // Calculate calories and moving time (simple formulas)
+                            const caloriesBurned = calculateActivityCalories(latestPacket.steps);
+                            const movingMinutes = calculateMovingTime(latestPacket.steps);
 
                             const enrichedData = {
                                 ...latestPacket,
@@ -237,7 +229,7 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
                             setHealthData(enrichedData);
 
-                            // Save latest to today's health data for persistence with cumulative values
+                            // Save latest to today's health data for persistence
                             await todayHealthDataService.saveHealthData(latestPacket, caloriesBurned, movingMinutes);
                         }
 

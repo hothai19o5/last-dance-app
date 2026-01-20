@@ -51,46 +51,23 @@ export function calculateBMR(profile: UserProfile): number {
 }
 
 /**
- * Calculate calories burned from steps based on activity type
- * 
- * Walking: ~0.04 calories per step (varies by weight)
- * Running: ~0.06 calories per step (varies by weight)
- * 
- * More accurate formula considers weight:
- * Walking: calories = steps × weight(kg) × 0.00048
- * Running: calories = steps × weight(kg) × 0.00072
+ * Calculate calories burned from steps
+ * Simple formula: ~0.04 calories per step (walking average)
  * 
  * @param steps Number of steps
- * @param activityStatus 0=sleeping, 1=resting, 2=walking, 3=running
- * @param weightKg User's weight in kg
- * @returns Calories burned from activity
+ * @returns Calories burned
  */
 export function calculateActivityCalories(
     steps: number,
-    activityStatus: number = 2, // Default to walking
-    weightKg: number = 70 // Default weight if not provided
+    _activityStatus: number = 2, // Not used anymore, kept for compatibility
+    _weightKg: number = 70 // Not used anymore, kept for compatibility
 ): number {
-    if (steps <= 0 || !weightKg) {
+    if (steps <= 0) {
         return 0;
     }
 
-    let caloriesPerStep: number;
-
-    switch (activityStatus) {
-        case 0: // Sleeping
-            return 0; // No active calories during sleep
-        case 1: // Resting
-            return 0; // No active calories while resting
-        case 2: // Walking
-            caloriesPerStep = weightKg * 0.00048;
-            break;
-        case 3: // Running
-            caloriesPerStep = weightKg * 0.00072;
-            break;
-        default:
-            caloriesPerStep = weightKg * 0.00048; // Default to walking
-    }
-
+    // Simple formula: 0.04 calories per step (average for walking)
+    const caloriesPerStep = 0.04;
     return Math.round(steps * caloriesPerStep);
 }
 
@@ -125,39 +102,22 @@ export function calculateTotalDailyCalories(
 }
 
 /**
- * Calculate moving time based on steps and activity type
- * 
- * Walking: ~100 steps per minute (2000 steps/hour)
- * Running: ~160 steps per minute (3200 steps/hour)
+ * Calculate moving time based on steps
+ * Simple formula: ~100 steps per minute (average walking pace)
  * 
  * @param steps Number of steps
- * @param activityStatus Activity type
  * @returns Moving time in minutes
  */
 export function calculateMovingTime(
     steps: number,
-    activityStatus: number = 2
+    _activityStatus: number = 2 // Not used anymore, kept for compatibility
 ): number {
     if (steps <= 0) {
         return 0;
     }
 
-    let stepsPerMinute: number;
-
-    switch (activityStatus) {
-        case 0: // Sleeping
-        case 1: // Resting
-            return 0;
-        case 2: // Walking
-            stepsPerMinute = 100;
-            break;
-        case 3: // Running
-            stepsPerMinute = 160;
-            break;
-        default:
-            stepsPerMinute = 100;
-    }
-
+    // Simple formula: 100 steps per minute (average walking pace)
+    const stepsPerMinute = 100;
     return Math.round(steps / stepsPerMinute);
 }
 

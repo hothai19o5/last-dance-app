@@ -27,49 +27,17 @@ const getTodayDateString = (): string => {
 
 export const todayHealthDataService = {
     /**
-     * Save or update today's health data with cumulative calories and moving time
+     * Save or update today's health data
+     * Simple: calories and moving time are calculated directly from total steps
      * @param data Health data from device
-     * @param caloriesBurned Calories burned calculated from this reading
-     * @param movingMinutes Moving time in minutes calculated from this reading
+     * @param caloriesBurned Calories burned (steps × 0.04)
+     * @param movingMinutes Moving time (steps ÷ 100)
      */
     async saveHealthData(data: BLEHealthData, caloriesBurned?: number, movingMinutes?: number): Promise<void> {
         try {
             const today = getTodayDateString();
-
-            // Get existing data to accumulate calories and moving time
-            const existingJson = await AsyncStorage.getItem(TODAY_HEALTH_KEY);
-            let existingStorage: TodayHealthStorage | null = null;
-
-            if (existingJson) {
-                existingStorage = JSON.parse(existingJson);
-                // Reset if it's a new day
-                if (existingStorage && existingStorage.date !== today) {
-                    existingStorage = null;
-                }
-            }
-
-            // Calculate cumulative values
-            let totalCaloriesBurned = existingStorage?.totalCaloriesBurned ?? 0;
-            let totalMovingMinutes = existingStorage?.totalMovingMinutes ?? 0;
-            const lastSteps = existingStorage?.lastSteps ?? 0;
-
-            // Only add calories/moving time if steps increased (new activity)
-            if (data.steps > lastSteps) {
-                if (caloriesBurned !== undefined) {
-                    // Calculate delta calories based on step difference
-                    const stepsDelta = data.steps - lastSteps;
-                    const caloriesPerStep = caloriesBurned / (data.steps || 1);
-                    const deltaCalories = stepsDelta * caloriesPerStep;
-                    totalCaloriesBurned += deltaCalories;
-                }
-                if (movingMinutes !== undefined) {
-                    // Calculate delta moving time based on step difference  
-                    const stepsDelta = data.steps - lastSteps;
-                    const minutesPerStep = movingMinutes / (data.steps || 1);
-                    const deltaMinutes = stepsDelta * minutesPerStep;
-                    totalMovingMinutes += deltaMinutes;
-                }
-            }
+            const totalCaloriesBurned = caloriesBurned ?? 0;
+            const totalMovingMinutes = movingMinutes ?? 0;
 
             const storage: TodayHealthStorage = {
                 date: today,
@@ -84,14 +52,6 @@ export const todayHealthDataService = {
             };
 
             await AsyncStorage.setItem(TODAY_HEALTH_KEY, JSON.stringify(storage));
-            console.log('[TodayHealth] Data saved for', today, {
-                hr: data.heartRate,
-                spo2: data.spo2,
-                steps: data.steps,
-                activity: data.activityStatus,
-                totalCalories: Math.round(totalCaloriesBurned),
-                totalMovingMinutes: Math.round(totalMovingMinutes),
-            });
         } catch (error) {
             console.error('[TodayHealth] Failed to save data:', error);
         }
