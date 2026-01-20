@@ -19,9 +19,11 @@ export const API_ENDPOINTS = {
 
     // Health Data
     HEALTH_DATA: '/sync/health-data',
+    HEALTH_STATISTICS: '/health-data/statistics', // Statistics endpoint
 
     // Device registration
     DEVICE: '/device',
+    MY_DEVICES: '/device/my', // Get current user's devices
 };
 
 export interface ApiResponse<T> {
@@ -75,6 +77,16 @@ export interface DeviceRegistrationRequest {
     username: string;
 }
 
+// Device response from server
+export interface DeviceResponse {
+    id: number;
+    deviceUuid: string;
+    deviceName: string;
+    active: boolean;  // API returns 'active' not 'isActive'
+    userId: number;
+    username: string;
+}
+
 export interface UserDetailResponse {
     id?: number;
     username?: string;
@@ -115,6 +127,17 @@ export interface ApiError {
     message: string;
     status?: number;
 }
+
+export interface StatisticsData {
+    chartData: { value: number; label: string }[];
+    average: number;
+    total: number;
+    max: number;
+    min: number;
+}
+
+export type HealthMetric = 'calories' | 'steps' | 'water' | 'hr' | 'spo2' | 'sleep' | 'weight';
+export type StatisticsRange = 'day' | 'week';
 
 class ApiService {
     private baseUrl: string;
@@ -522,6 +545,17 @@ class ApiService {
     }
 
     /**
+     * Get all devices of the current authenticated user
+     */
+    async getMyDevices(): Promise<ApiResponse<DeviceResponse[]>> {
+        console.log('[API] Fetching user devices from server');
+        return this.get<ApiResponse<DeviceResponse[]>>(
+            API_ENDPOINTS.MY_DEVICES,
+            true // Requires authentication
+        );
+    }
+
+    /**
      * Delete/unlink a device from the current user
      */
     async deleteDevice(deviceUuid: string): Promise<ApiResponse<{ message?: string }>> {
@@ -529,6 +563,20 @@ class ApiService {
         return this.delete<ApiResponse<{ message?: string }>>(
             `${API_ENDPOINTS.DEVICE}/${deviceUuid}`,
             true // Requires authentication
+        );
+    }
+
+    /**
+     * Get health statistics for a specific metric and range
+     * @param metric - The health metric (calories, steps, water, hr, spo2, sleep, weight)
+     * @param range - Time range (day or week)
+     * @returns Statistics data
+     */
+    async getHealthStatistics(metric: HealthMetric, range: StatisticsRange): Promise<StatisticsData> {
+        console.log(`[API] Fetching ${metric} statistics for ${range}`);
+        return this.get<StatisticsData>(
+            `${API_ENDPOINTS.HEALTH_STATISTICS}?metric=${metric}&range=${range}`,
+            true
         );
     }
 

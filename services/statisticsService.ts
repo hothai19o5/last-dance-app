@@ -1,12 +1,7 @@
-import { apiService } from './api';
+import { apiService, HealthMetric, StatisticsData, StatisticsRange } from './api';
 
-export interface StatisticsData {
-    chartData: { value: number; label: string }[];
-    average: number;
-    total: number;
-    max: number;
-    min: number;
-}
+// Re-export for backward compatibility
+export type { StatisticsData };
 
 /**
  * Normalize statistics data to ensure all fields have valid values
@@ -23,118 +18,69 @@ function normalizeStats(data: Partial<StatisticsData> | null | undefined): Stati
 
 /**
  * Service for fetching health statistics from backend
+ * Uses centralized API methods from api.ts
  */
 class StatisticsService {
     /**
-     * Get calories statistics
+     * Generic method to get statistics for any metric
      */
-    async getCaloriesStats(range: 'day' | 'week'): Promise<StatisticsData> {
+    private async getStats(metric: HealthMetric, range: StatisticsRange): Promise<StatisticsData> {
         try {
-            const response = await apiService.get<StatisticsData>(
-                `/health-data/statistics?metric=calories&range=${range}`,
-                true
-            );
+            const response = await apiService.getHealthStatistics(metric, range);
             return normalizeStats(response);
         } catch (error) {
-            console.error('Failed to fetch calories stats:', error);
+            console.error(`Failed to fetch ${metric} stats:`, error);
             return this.getEmptyStats();
         }
+    }
+
+    /**
+     * Get calories statistics
+     */
+    async getCaloriesStats(range: StatisticsRange): Promise<StatisticsData> {
+        return this.getStats('calories', range);
     }
 
     /**
      * Get steps statistics
      */
-    async getStepsStats(range: 'day' | 'week'): Promise<StatisticsData> {
-        try {
-            const response = await apiService.get<StatisticsData>(
-                `/health-data/statistics?metric=steps&range=${range}`,
-                true
-            );
-            return normalizeStats(response);
-        } catch (error) {
-            console.error('Failed to fetch steps stats:', error);
-            return this.getEmptyStats();
-        }
+    async getStepsStats(range: StatisticsRange): Promise<StatisticsData> {
+        return this.getStats('steps', range);
     }
 
     /**
      * Get water intake statistics
      */
-    async getWaterStats(range: 'day' | 'week'): Promise<StatisticsData> {
-        try {
-            const response = await apiService.get<StatisticsData>(
-                `/health-data/statistics?metric=water&range=${range}`,
-                true
-            );
-            return normalizeStats(response);
-        } catch (error) {
-            console.error('Failed to fetch water stats:', error);
-            return this.getEmptyStats();
-        }
+    async getWaterStats(range: StatisticsRange): Promise<StatisticsData> {
+        return this.getStats('water', range);
     }
 
     /**
      * Get heart rate statistics
      */
-    async getHeartRateStats(range: 'day' | 'week'): Promise<StatisticsData> {
-        try {
-            const response = await apiService.get<StatisticsData>(
-                `/health-data/statistics?metric=hr&range=${range}`,
-                true
-            );
-            return normalizeStats(response);
-        } catch (error) {
-            console.error('Failed to fetch heart rate stats:', error);
-            return this.getEmptyStats();
-        }
+    async getHeartRateStats(range: StatisticsRange): Promise<StatisticsData> {
+        return this.getStats('hr', range);
     }
 
     /**
      * Get SpO2 statistics
      */
-    async getSpO2Stats(range: 'day' | 'week'): Promise<StatisticsData> {
-        try {
-            const response = await apiService.get<StatisticsData>(
-                `/health-data/statistics?metric=spo2&range=${range}`,
-                true
-            );
-            return normalizeStats(response);
-        } catch (error) {
-            console.error('Failed to fetch SpO2 stats:', error);
-            return this.getEmptyStats();
-        }
+    async getSpO2Stats(range: StatisticsRange): Promise<StatisticsData> {
+        return this.getStats('spo2', range);
     }
 
     /**
      * Get sleep statistics
      */
-    async getSleepStats(range: 'day' | 'week'): Promise<StatisticsData> {
-        try {
-            const response = await apiService.get<StatisticsData>(
-                `/health-data/statistics?metric=sleep&range=${range}`,
-                true
-            );
-            return normalizeStats(response);
-        } catch (error) {
-            console.error('Failed to fetch sleep stats:', error);
-            return this.getEmptyStats();
-        }
+    async getSleepStats(range: StatisticsRange): Promise<StatisticsData> {
+        return this.getStats('sleep', range);
     }
 
     /**
      * Get weight statistics
      */
-    async getWeightStats(range: 'day' | 'week'): Promise<StatisticsData> {
-        try {
-            const response = await apiService.get<StatisticsData>(
-                `/health-data/statistics?metric=weight&range=${range}`,
-                true
-            );
-            return normalizeStats(response);
-        } catch (error) {
-            console.error('Failed to fetch weight stats:', error);
-            return this.getEmptyStats();
-        }
+    async getWeightStats(range: StatisticsRange): Promise<StatisticsData> {
+        return this.getStats('weight', range);
     }
 
     /**

@@ -6,6 +6,7 @@ import { BLEService } from '../services/bleService';
 import { dataSyncService } from '../services/dataSync';
 import { DeviceStorage } from '../services/deviceStorage';
 import { healthHistoryService } from '../services/healthHistoryService';
+import { todayHealthDataService } from '../services/todayHealthDataService';
 import { userProfileService } from '../services/userProfileService';
 import { BLEBatchData, BLEConfig, BLEHealthData, WearableDevice } from '../types';
 
@@ -22,7 +23,7 @@ interface DeviceContextType {
     syncDeviceData: () => Promise<void>;
     disconnectDevice: () => Promise<void>;
     forceSyncToServer: () => Promise<boolean>;
-    reconnectToDevice: (deviceId: string) => Promise<boolean>;
+    reconnectToDevice: (deviceId: string, deviceInfo?: WearableDevice) => Promise<boolean>;
     getDeviceHistory: () => Promise<WearableDevice[]>;
     sendUserProfileToDevice: (deviceId: string) => Promise<boolean>;
     removeDevice: (deviceId: string) => Promise<boolean>;
@@ -49,9 +50,24 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         }
     };
 
+    // Load today's health data from local storage (for displaying when app reopens)
+    const loadTodayHealthData = async () => {
+        try {
+            const savedHealthData = await todayHealthDataService.getTodayHealthData();
+            if (savedHealthData) {
+                console.log('[DeviceContext] Loaded today health data from storage');
+                setHealthData(savedHealthData);
+            }
+        } catch (error) {
+            console.error('[DeviceContext] Error loading today health data:', error);
+        }
+    };
+
     // Load device on mount
     useEffect(() => {
         loadDevice();
+        // Load today's health data so cards show data even before device connects
+        loadTodayHealthData();
 
         // Check connection status periodically
         const checkInterval = setInterval(() => {
@@ -153,6 +169,9 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
                     setHealthData(data);
 
+                    // Save to today's health data for persistence (so cards show data when app reopens)
+                    await todayHealthDataService.saveHealthData(data);
+
                     // Save to health history for charts
                     await healthHistoryService.addHealthData(data);
 
@@ -182,6 +201,9 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                     if (batchData.packets.length > 0) {
                         const latestPacket = batchData.packets[batchData.packets.length - 1];
                         setHealthData(latestPacket);
+
+                        // Save latest to today's health data for persistence
+                        await todayHealthDataService.saveHealthData(latestPacket);
                     }
 
                     updateSyncCount();
@@ -342,7 +364,7 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         return result;
     };
 
-    const reconnectToDevice = async (deviceId: string): Promise<boolean> => {
+    const reconnectToDevice = async (deviceId: string, deviceInfo?: WearableDevice): Promise<boolean> => {
         try {
             console.log('[DeviceContext] Reconnecting to device:', deviceId);
 
@@ -356,8 +378,17 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             const connected = await BLEService.connectToDevice(deviceId);
 
             if (connected) {
+                // Try to find device in local storage first
                 const history = await DeviceStorage.getDeviceHistory();
-                const targetDevice = history.find(d => d.id === deviceId);
+                let targetDevice = history.find(d => d.id === deviceId);
+
+                // If not in local storage but deviceInfo provided (e.g., from API), use that
+                if (!targetDevice && deviceInfo) {
+                    console.log('[DeviceContext] Device not in local storage, using provided deviceInfo');
+                    targetDevice = deviceInfo;
+                    // Save to local storage for future use
+                    await DeviceStorage.addToDeviceHistory(targetDevice);
+                }
 
                 if (targetDevice) {
                     const updatedDevice = { ...targetDevice, connected: true };
@@ -372,6 +403,8 @@ export const DeviceProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                     }
 
                     return true;
+                } else {
+                    console.error('[DeviceContext] Device connected but no device info available');
                 }
             }
 

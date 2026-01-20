@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Animated, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AddMenuToggle from '../../components/AddMenuToggle';
 import { useDevice } from '../../contexts/DeviceContext';
 import { useTheme, useThemeColors } from '../../contexts/ThemeContext';
+import { apiService } from '../../services/api';
 import { WearableDevice } from '../../types';
 import { deviceToasts, showToast } from '../../utils/toast';
 
@@ -16,18 +17,77 @@ export default function DeviceScreen() {
     const [syncing, setSyncing] = useState(false);
     const [showAddMenu, setShowAddMenu] = useState(false);
     const [deviceHistory, setDeviceHistory] = useState<WearableDevice[]>([]);
+    const [loadingDevices, setLoadingDevices] = useState(false);
     const fadeAnim = useRef(new Animated.Value(1)).current;
 
     const hasDevice = !!device;
 
-    // Load device history on mount
-    useEffect(() => {
-        loadDeviceHistory();
-    }, []);
+    // Load device history when screen comes into focus
+    useFocusEffect(
+        useCallback(() => {
+            loadDeviceHistory();
+        }, [])
+    );
 
+    /**
+     * Load devices from both API (server) and local storage, then merge them.
+     * API devices are the source of truth for registered devices.
+     * Local storage may have devices that were connected but not yet synced.
+     */
     const loadDeviceHistory = async () => {
-        const history = await getDeviceHistory();
-        setDeviceHistory(history);
+        setLoadingDevices(true);
+        try {
+            // Get devices from local storage first (for offline support)
+            const localHistory = await getDeviceHistory();
+
+            // Try to fetch devices from API
+            try {
+                const response = await apiService.getMyDevices();
+                console.log('[Device] API response:', response);
+
+                if (response.data && Array.isArray(response.data)) {
+                    // Convert API response to WearableDevice format
+                    const apiDevices: WearableDevice[] = response.data.map(d => ({
+                        id: d.deviceUuid,
+                        name: d.deviceName,
+                        type: 'smartwatch',
+                        connected: device?.id === d.deviceUuid && isConnected,
+                        battery: device?.id === d.deviceUuid ? (device?.battery ?? 100) : 100,
+                    }));
+
+                    // Merge: API devices take priority, but preserve local connection status
+                    const mergedDevices = apiDevices.map(apiDevice => {
+                        const localDevice = localHistory.find(l => l.id === apiDevice.id);
+                        return {
+                            ...apiDevice,
+                            connected: localDevice?.connected ?? apiDevice.connected,
+                            battery: localDevice?.battery ?? apiDevice.battery,
+                        };
+                    });
+
+                    // Add any local-only devices (connected but not yet registered on server)
+                    const apiDeviceIds = new Set(apiDevices.map(d => d.id));
+                    const localOnlyDevices = localHistory.filter(l => !apiDeviceIds.has(l.id));
+
+                    const finalDevices = [...mergedDevices, ...localOnlyDevices];
+                    console.log('[Device] Final merged devices:', finalDevices.length);
+                    setDeviceHistory(finalDevices);
+                } else {
+                    // API returned empty or invalid data, use local
+                    console.log('[Device] API returned no devices, using local storage');
+                    setDeviceHistory(localHistory);
+                }
+            } catch (apiError) {
+                // API failed, fall back to local storage
+                console.warn('[Device] Failed to fetch devices from API:', apiError);
+                setDeviceHistory(localHistory);
+            }
+        } catch (error) {
+            console.error('[Device] Error loading device history:', error);
+            showToast.error('Failed to load devices');
+        } finally {
+            setLoadingDevices(false);
+        }
     };
 
     // Fade animation on theme change
@@ -87,7 +147,8 @@ export default function DeviceScreen() {
                 {
                     text: 'Connect',
                     onPress: async () => {
-                        const success = await reconnectToDevice(selectedDevice.id);
+                        // Pass device info so it can be saved to local storage if not already there
+                        const success = await reconnectToDevice(selectedDevice.id, selectedDevice);
                         if (success) {
                             deviceToasts.connected(selectedDevice.name);
                             await loadDeviceHistory();
@@ -180,6 +241,71 @@ export default function DeviceScreen() {
                         </TouchableOpacity>
                     </View>
                 </View>
+
+                {/* My Devices - Show registered devices even when not connected */}
+                {(deviceHistory.length > 0 || loadingDevices) && (
+                    <View style={[styles.section, { backgroundColor: colors.cardBackground }]}>
+                        <View style={styles.sectionHeader}>
+                            <Text style={[styles.sectionTitle, { color: colors.text }]}>My Devices</Text>
+                            <TouchableOpacity onPress={loadDeviceHistory} disabled={loadingDevices}>
+                                {loadingDevices ? (
+                                    <ActivityIndicator size="small" color={colors.tint} />
+                                ) : (
+                                    <Ionicons name="refresh" size={20} color={colors.tint} />
+                                )}
+                            </TouchableOpacity>
+                        </View>
+
+                        {loadingDevices ? (
+                            <View style={styles.emptyDevicesContainer}>
+                                <ActivityIndicator size="large" color={colors.tint} />
+                                <Text style={[styles.emptyDevicesText, { color: colors.textSecondary, marginTop: 12 }]}>
+                                    Loading devices...
+                                </Text>
+                            </View>
+                        ) : (
+                            <ScrollView
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                contentContainerStyle={styles.watchFacesContainer}
+                            >
+                                {deviceHistory.map((savedDevice) => (
+                                    <TouchableOpacity
+                                        key={savedDevice.id}
+                                        style={[styles.watchFaceCard, { backgroundColor: colors.cardBackground }]}
+                                        onPress={() => handleWatchFaceSelect(savedDevice)}
+                                        onLongPress={() => handleDeleteDevice(savedDevice)}
+                                        delayLongPress={500}
+                                    >
+                                        <View style={[styles.watchFaceImage, { backgroundColor: colors.divider }]}>
+                                            {savedDevice.image ? (
+                                                <Image
+                                                    source={{ uri: savedDevice.image }}
+                                                    style={styles.savedDeviceImage}
+                                                    resizeMode="contain"
+                                                />
+                                            ) : (
+                                                <Image
+                                                    source={require('../../assets/images/device.png')}
+                                                    style={styles.savedDeviceImage}
+                                                    resizeMode="contain"
+                                                />
+                                            )}
+                                        </View>
+                                        <Text style={[styles.watchFaceName, { color: colors.text }]} numberOfLines={1}>
+                                            {savedDevice.name}
+                                        </Text>
+                                        <Text style={[styles.tapToConnectText, { color: colors.tint }]}>
+                                            Tap to connect
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                        )}
+                    </View>
+                )}
+
+                <View style={styles.bottomSpacing} />
 
                 {/* Add Menu Toggle */}
                 <AddMenuToggle
@@ -286,12 +412,23 @@ export default function DeviceScreen() {
             <View style={[styles.section, { backgroundColor: colors.cardBackground }]}>
                 <View style={styles.sectionHeader}>
                     <Text style={[styles.sectionTitle, { color: colors.text }]}>My Devices</Text>
-                    <TouchableOpacity onPress={loadDeviceHistory} >
-                        <Ionicons name="refresh" size={20} color={colors.tint} />
+                    <TouchableOpacity onPress={loadDeviceHistory} disabled={loadingDevices}>
+                        {loadingDevices ? (
+                            <ActivityIndicator size="small" color={colors.tint} />
+                        ) : (
+                            <Ionicons name="refresh" size={20} color={colors.tint} />
+                        )}
                     </TouchableOpacity>
                 </View>
 
-                {deviceHistory.length === 0 ? (
+                {loadingDevices ? (
+                    <View style={styles.emptyDevicesContainer}>
+                        <ActivityIndicator size="large" color={colors.tint} />
+                        <Text style={[styles.emptyDevicesText, { color: colors.textSecondary, marginTop: 12 }]}>
+                            Loading devices...
+                        </Text>
+                    </View>
+                ) : deviceHistory.length === 0 ? (
                     <View style={styles.emptyDevicesContainer}>
                         <Text style={[styles.emptyDevicesText, { color: colors.textSecondary }]}>
                             No devices found. Connect a device to get started.
@@ -618,6 +755,11 @@ const styles = StyleSheet.create({
         fontSize: 12,
         textAlign: 'center',
         maxWidth: 80,
+    },
+    tapToConnectText: {
+        fontSize: 10,
+        textAlign: 'center',
+        marginTop: 4,
     },
     activeDeviceBadge: {
         marginTop: 4,
